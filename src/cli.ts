@@ -15,13 +15,25 @@ export const EXIT_USAGE = 2;
 
 export const USAGE = [
   'Uso: cpf-cnpj <numero> [<numero> ...]',
+  '     cpf-cnpj --json <numero> [<numero> ...]',
   '     cpf-cnpj --help',
   '',
   'Valida cada número como CPF (11 caracteres) ou CNPJ (14 caracteres), com ou sem máscara.',
   'Saída: uma linha por número, "<válido|inválido>\\t<cpf|cnpj|desconhecido>\\t<entrada>".',
   'Na entrada, \\, tabulação, quebra de linha e outros caracteres de controle saem como escape.',
+  'Com --json: um objeto em uma linha, {"valido","total","invalidos","resultados":[{"entrada","tipo","valido"}]}.',
   'Código de saída: 0 se todos válidos, 1 se algum inválido, 2 para erro de uso.',
 ].join('\n');
+
+const KNOWN_OPTIONS: ReadonlySet<string> = new Set(['--help', '--json']);
+
+/** Formato da saída `--json` (decisão do dono na pendência #6, opção B). */
+export interface JsonReport {
+  valido: boolean;
+  total: number;
+  invalidos: number;
+  resultados: { entrada: string; tipo: string; valido: boolean }[];
+}
 
 const ESCAPES: Readonly<Record<string, string>> = { '\\': '\\\\', '\t': '\\t', '\n': '\\n', '\r': '\\r' };
 
@@ -39,29 +51,40 @@ export function escapeInput(input: string): string {
 /** Executa a CLI com `args` (sem `node` e o script) e devolve o código de saída. */
 export function main(args: readonly string[], io: CliIo): number {
   const options = args.filter((arg) => arg.startsWith('-'));
-  const unknown = options.find((option) => option !== '--help');
+  const unknown = options.find((option) => !KNOWN_OPTIONS.has(option));
   if (unknown !== undefined) {
     io.stderr(`cpf-cnpj: opção desconhecida: ${unknown}`);
     io.stderr(USAGE);
     return EXIT_USAGE;
   }
-  if (options.length > 0) {
+  if (options.includes('--help')) {
     io.stdout(USAGE);
     return EXIT_OK;
   }
-  if (args.length === 0) {
+  const json = options.includes('--json');
+  const numbers = args.filter((arg) => !arg.startsWith('-'));
+  if (numbers.length === 0) {
     io.stderr('cpf-cnpj: informe ao menos um número');
     io.stderr(USAGE);
     return EXIT_USAGE;
   }
 
-  let allValid = true;
-  for (const arg of args) {
-    const { type, valid } = checkDocument(arg);
-    if (!valid) allValid = false;
-    io.stdout(`${valid ? 'válido' : 'inválido'}\t${type}\t${escapeInput(arg)}`);
+  const results = numbers.map((entrada) => {
+    const { type, valid } = checkDocument(entrada);
+    return { entrada, tipo: type, valido: valid };
+  });
+  const invalidos = results.filter((result) => !result.valido).length;
+
+  if (json) {
+    // JSON.stringify já escapa caracteres de controle: a entrada vai sem o escape da saída de texto.
+    const report: JsonReport = { valido: invalidos === 0, total: results.length, invalidos, resultados: results };
+    io.stdout(JSON.stringify(report));
+  } else {
+    for (const { entrada, tipo, valido } of results) {
+      io.stdout(`${valido ? 'válido' : 'inválido'}\t${tipo}\t${escapeInput(entrada)}`);
+    }
   }
-  return allValid ? EXIT_OK : EXIT_INVALID;
+  return invalidos === 0 ? EXIT_OK : EXIT_INVALID;
 }
 
 function isEntryPoint(): boolean {

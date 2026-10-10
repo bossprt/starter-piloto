@@ -6,7 +6,7 @@ import { parseFrontmatter } from './frontmatter.mjs';
 export const AGENTS_MAX_LINES = 100;
 export const TASK_REQUIRED_KEYS = ['id', 'title', 'depends_on', 'validation', 'test_command'];
 export const TASK_FORBIDDEN_KEYS = ['status', 'owner', 'evidence'];
-export const TASK_VALIDATIONS = ['ci', 'ci+humano'];
+export const TASK_VALIDATIONS = ['ci', 'ci+humano', 'ci+revisao'];
 
 /** Conta linhas como o editor mostra (newline final não cria linha extra). */
 export function countLines(text) {

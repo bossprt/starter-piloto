@@ -25,6 +25,14 @@ inválido	desconhecido	123
 - CNPJ alfanumérico aceito (letras maiúsculas nas 12 primeiras posições).
 - Código de saída: `0` se todos válidos; `1` se algum inválido; `2` para erro de uso
   (nenhum argumento ou opção desconhecida, com mensagem em stderr).
+- `--json` (em qualquer posição) troca a saída por um objeto JSON em uma linha, com os mesmos códigos de saída:
+
+  ```text
+  $ node dist/cli.js --json 529.982.247-25 123
+  {"valido":false,"total":2,"invalidos":1,"resultados":[{"entrada":"529.982.247-25","tipo":"cpf","valido":true},{"entrada":"123","tipo":"desconhecido","valido":false}]}
+  ```
+
+  Erros de uso continuam em texto no stderr, sem nada no stdout.
 - `node dist/cli.js --help` mostra o uso. Com `npm link`, o comando fica disponível como `cpf-cnpj`.
 
 ## Desenvolvimento

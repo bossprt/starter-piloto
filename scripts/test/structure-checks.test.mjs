@@ -56,6 +56,10 @@ describe('frontmatter das tarefas', () => {
     const content = validTask.replace('validation: ci\n', 'validation: ci\nstatus: feito\n');
     expect(checkTasks([{ file: 'TASK-001.md', content }])[0]).toContain('"status" proibido');
   });
+  it('passa com validation ci+revisao', () => {
+    const content = validTask.replace('validation: ci', 'validation: ci+revisao');
+    expect(checkTasks([{ file: 'TASK-001.md', content }])).toEqual([]);
+  });
   it('falha com validation fora da lista', () => {
     const content = validTask.replace('validation: ci', 'validation: manual');
     expect(checkTasks([{ file: 'TASK-001.md', content }])[0]).toContain('validation deve ser');
