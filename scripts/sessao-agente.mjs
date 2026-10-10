@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { summarizeClaudeStream } from './lib/usage.mjs';
+import { quotaAlerts, summarizeClaudeStream } from './lib/usage.mjs';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -62,3 +62,8 @@ console.log(`tokens de entrada: ${s.totalInput} (novos ${s.input}, cache criado 
 console.log(`custo informado: ${s.costUsd === null ? 'não disponível' : `US$ ${s.costUsd.toFixed(3)}`}`);
 console.log(`cota do Claude: 5h ${s.fiveHour ?? 'não disponível'}% · 7 dias ${s.sevenDay ?? 'não disponível'}%`);
 process.exitCode = result.status ?? 1;
+const alerts = quotaAlerts([{ name: 'Claude 5h', percent: s.fiveHour }, { name: 'Claude 7 dias', percent: s.sevenDay }]);
+if (alerts.length > 0) {
+  console.log(`PARAR: ${alerts.map((a) => `${a.name} em ${a.percent}%`).join('; ')}. Não abra novas sessões; abra pendência (docs/regras/gastos.md).`);
+  process.exitCode = 3;
+}

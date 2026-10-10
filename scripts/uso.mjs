@@ -69,14 +69,24 @@ const repo = gh(['repo', 'view', '--json', 'nameWithOwner']);
 let actions = 'gh indisponível';
 if (repo) {
   const month = new Date().toISOString().slice(0, 7);
-  const runs = gh(['api', `repos/${repo.nameWithOwner}/actions/runs?per_page=100&created=>=${month}-01`]);
-  if (runs) {
-    const list = runs.workflow_runs ?? [];
+  // Pagina até cobrir total_count (100 por página).
+  const list = [];
+  let total = null;
+  for (let page = 1; total === null || list.length < total; page += 1) {
+    const runs = gh(['api', `repos/${repo.nameWithOwner}/actions/runs?per_page=100&page=${page}&created=>=${month}-01`]);
+    if (!runs) break;
+    total = runs.total_count;
+    if ((runs.workflow_runs ?? []).length === 0) break;
+    list.push(...runs.workflow_runs);
+  }
+  if (total !== null) {
+    const runs = { total_count: total };
     const minutes = list.reduce((sum, run) => sum + Math.max(0, (Date.parse(run.updated_at) - Date.parse(run.run_started_at ?? run.created_at)) / 60000), 0);
     const perPr = {};
     for (const run of list) for (const pr of run.pull_requests ?? []) perPr[pr.number] = (perPr[pr.number] ?? 0) + 1;
     const multi = Object.entries(perPr).filter(([, count]) => count > 1).map(([number, count]) => `#${number}:${count}`);
-    actions = `${runs.total_count} execuções em ${month}, ~${minutes.toFixed(1)} min de relógio; PRs com mais de 1 execução: ${multi.join(' ') || 'nenhum'}`;
+    const partial = list.length < total ? ` (parcial: ${list.length} lidas)` : '';
+    actions = `${runs.total_count} execuções em ${month}${partial}, ~${minutes.toFixed(1)} min de relógio; PRs com mais de 1 execução: ${multi.join(' ') || 'nenhum'}`;
   }
 }
 

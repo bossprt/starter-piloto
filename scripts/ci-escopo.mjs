@@ -7,7 +7,8 @@ import { appendFileSync } from 'node:fs';
 import { isDocsOnly } from './lib/ci-scope.mjs';
 
 const value = (name) => process.argv[process.argv.indexOf(name) + 1];
-const diff = spawnSync('git', ['diff', '--name-only', `${value('--base')}...${value('--head')}`], { encoding: 'utf8' });
+// --no-renames: renomear src/x.ts para x.md aparece como remoção do .ts, não como só documentação.
+const diff = spawnSync('git', ['diff', '--name-only', '--no-renames', `${value('--base')}...${value('--head')}`], { encoding: 'utf8' });
 if (diff.status !== 0) {
   // Sem diff confiável: roda tudo.
   console.log(`diff indisponível (${diff.stderr.trim()}); rodando validação completa`);
