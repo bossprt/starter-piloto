@@ -14,8 +14,8 @@ Estado do projeto: `npm run status` (não deduza estado lendo arquivos).
 
 Autorizado sem pedir aprovação:
 - programar, testar, abrir PRs com "TASK-NNN" no título;
-- integrar `validation: ci+revisao` (padrão) ou `ci` com CI verde, main "protegida" no status e,
-  para `ci+revisao`, a última revisão do Codex sem defeito aberto (etiqueta `revisao-sem-defeito`).
+- integrar `validation: ci+revisao` (padrão) ou `ci` quando o `npm run status` mostrar o PR como
+  "integrável" (CI verde + revisão do Codex registrada sem defeito, ADR 0004) e a main "protegida".
 
 O dono só entra em (registre como pendência, nunca faça):
 - escolha de produto ou direção: escopo, formato público, ferramenta/serviço, `decisao_pendente`;
@@ -45,9 +45,10 @@ Regras gerais:
 3. Branch `task/NNN-slug` a partir da `main` atualizada (`npm ci` se faltar `node_modules`).
 4. Implementar com testes. Código em `src/`, testes em `test/`.
 5. Rodar `npm run validate` até passar.
-6. Revisão do Codex **antes do push**: `node scripts/codex-review.mjs --task TASK-NNN`
-   (demora minutos: rode em segundo plano). Corrigir defeito real; registrar o descartado e o porquê.
-   Codex falhou: "revisão: não realizada" + causa (e a tarefa não é integrada automaticamente).
+6. Commit (com `Agente:`) e revisão do Codex **antes do push**, em segundo plano (demora minutos):
+   `node scripts/codex-review.mjs --task TASK-NNN --registrar`. Com defeito real: corrigir, commitar
+   e revisar de novo (o registro só vale no topo). Registrar o descartado e o porquê no PR.
+   Codex falhou: "revisão: não realizada" + causa; a tarefa não é integrada automaticamente.
 7. Um push, PR com "TASK-NNN" no título; corpo com critérios atendidos, seção "Revisão"
    (apontado, corrigido, descartado) e linhas `Executor:` / `Revisor:`.
 8. Integrar (squash, apagar branch) só nas condições da regra de coordenação.
@@ -62,7 +63,7 @@ Regras gerais:
 | Estado do projeto / próxima tarefa | `npm run status` (não leia arquivos para isso) |
 | Entender o produto e o fora de escopo | `docs/PRODUCT.md` |
 | Restrições técnicas | `docs/ARCHITECTURE.md` |
-| Por que a stack / os papéis / o papel do humano | `docs/decisions/` (0001 stack, 0002 papéis, 0003 humano) |
+| Por que a stack / papéis / humano / revisão verificável | `docs/decisions/` (0001, 0002, 0003, 0004) |
 | Decisão de direção (o que construir, qual ferramenta) | `docs/regras/direcao.md` |
 | Escolher ferramenta, biblioteca ou arquitetura | `docs/regras/pesquisa.md` e `docs/regras/ferramentas.md` |
 | Projeto passar a ser comercial | `docs/regras/custos.md` |
@@ -73,7 +74,7 @@ Regras gerais:
 
 - `npm run validate` — lint, typecheck, build, testes, checagens de estrutura. Mesmo comando do CI.
 - `npm run status` — estado das tarefas, próxima tarefa, proteção da main, pendências.
-- `node scripts/codex-review.mjs --task TASK-NNN` — revisão do Codex em somente leitura.
+- `node scripts/codex-review.mjs --task TASK-NNN --registrar` — revisão do Codex (só leitura) + registro.
 
 ## Convenções
 
