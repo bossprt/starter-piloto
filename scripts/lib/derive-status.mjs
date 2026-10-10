@@ -4,6 +4,9 @@
 
 import { verifyReviewRecord } from './review-record.mjs';
 
+// PRs integrados antes desta data podem usar a etiqueta revisao-sem-defeito no lugar do registro (ADR 0004).
+export const REVIEW_RECORD_REQUIRED_SINCE = '2026-10-10T22:00:00Z';
+
 export const TASK_ID_PATTERN = /(?<![\w-])TASK-(\d{3})(?![\w-])/;
 
 /**
@@ -117,8 +120,12 @@ export function deriveTaskState(task, prs, pendencias) {
       extraNote = extraOk ? ', aceite-humano' : 'sem etiqueta aceite-humano';
     } else if (task.validation === 'ci+revisao') {
       const record = verifyReviewRecord(pr.reviewHead);
+      // A etiqueta só substitui o registro quando não há registro nenhum e o PR é anterior à regra.
+      // Registro existente e inválido (com defeito, árvore divergente) nunca é ignorado.
+      const legacy = record.verdict === null && labels.includes('revisao-sem-defeito')
+        && String(pr.mergedAt ?? '') < REVIEW_RECORD_REQUIRED_SINCE;
       if (record.ok) extraNote = ', revisão registrada';
-      else if (labels.includes('revisao-sem-defeito')) extraNote = ', revisao-sem-defeito (etiqueta, sem registro verificável)';
+      else if (legacy) extraNote = ', revisao-sem-defeito (etiqueta, anterior ao registro verificável)';
       else {
         extraOk = false;
         extraNote = `sem revisão registrada (${record.reason})`;

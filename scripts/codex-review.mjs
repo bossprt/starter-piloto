@@ -51,6 +51,7 @@ if (!codex) {
 }
 const codexVersion = spawnSync(process.execPath, [codex, '--version'], { encoding: 'utf8' }).stdout.trim() || 'Codex CLI';
 
+const head = git(['rev-parse', 'HEAD']);
 const tree = git(['rev-parse', 'HEAD^{tree}']);
 const baseSha = git(['rev-parse', base]);
 
@@ -136,12 +137,20 @@ if (register) {
     console.error('codex-review: sem linha VEREDITO na resposta; nada registrado. Rode de novo.');
     process.exit(1);
   }
-  const message = buildRecordMessage({ verdict, tree, base: baseSha, tokens, threadId, summary: answer, codexVersion });
-  const commit = spawnSync('git', ['commit', '--allow-empty', '-q', '-F', '-'], { encoding: 'utf8', input: message });
-  if (commit.status !== 0) {
-    console.error(`codex-review: falha ao registrar: ${commit.stderr}`);
+  // A revisão roda em segundo plano: confere de novo que nada mudou desde o início.
+  if (git(['rev-parse', 'HEAD']) !== head || git(['rev-parse', base]) !== baseSha || git(['status', '--porcelain']) !== '') {
+    console.error('codex-review: HEAD, base ou árvore de trabalho mudaram durante a revisão; nada registrado. Rode de novo.');
     process.exit(1);
   }
+  // Commit explicitamente vazio: mesma árvore revisada, pai = HEAD revisado. Nada do índice entra.
+  const message = buildRecordMessage({ verdict, tree, base: baseSha, tokens, threadId, summary: answer, codexVersion });
+  const created = spawnSync('git', ['commit-tree', tree, '-p', head, '-F', '-'], { encoding: 'utf8', input: message });
+  if (created.status !== 0) {
+    console.error(`codex-review: falha ao registrar: ${created.stderr}`);
+    process.exit(1);
+  }
+  // update-ref com valor antigo: falha se HEAD andou entre a conferência e a gravação.
+  git(['update-ref', '-m', 'codex-review: registro', 'HEAD', created.stdout.trim(), head]);
   console.log(`registro gravado: ${git(['rev-parse', '--short', 'HEAD'])} (Codex-Review: ${verdict})`);
 }
 process.exitCode = verdict === 'sem-defeito' ? 0 : 3;

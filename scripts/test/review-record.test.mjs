@@ -66,6 +66,16 @@ describe('integrável (project-status)', () => {
     const humano = { ...task, validation: 'ci+humano' };
     expect(deriveTaskState(humano, [{ ...base, reviewHead: { message: record('sem-defeito'), tree: TREE } }], []).integravel).toBe(false);
   });
+  it('etiqueta não substitui registro existente com defeito', () => {
+    const merged = { ...base, state: 'MERGED', mergedAt: '2026-10-10T11:00:00Z', labels: [{ name: 'revisao-sem-defeito' }], reviewHead: { message: record('com-defeito'), tree: TREE } };
+    expect(deriveTaskState(task, [merged], []).state).toBe('integrada');
+  });
+  it('etiqueta sem registro só vale para PR integrado antes da regra', () => {
+    const before = { ...base, state: 'MERGED', mergedAt: '2026-10-10T21:46:29Z', labels: [{ name: 'revisao-sem-defeito' }], reviewHead: { message: 'feat: x', tree: TREE } };
+    const after = { ...before, mergedAt: '2026-10-11T09:00:00Z' };
+    expect(deriveTaskState(task, [before], []).state).toBe('validada');
+    expect(deriveTaskState(task, [after], []).state).toBe('integrada');
+  });
   it('validada (ci+revisao) quando integrado com registro verificável', () => {
     const merged = { ...base, state: 'MERGED', mergedAt: '2026-10-10T11:00:00Z', reviewHead: { message: record('sem-defeito'), tree: TREE } };
     const result = deriveTaskState(task, [merged], []);
