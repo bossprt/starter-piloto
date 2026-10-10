@@ -172,23 +172,88 @@ describe('deriveProtection', () => {
     required_pull_request_reviews: { required_approving_review_count: 0 },
     enforce_admins: { enabled: true },
   };
+  const notProtected = { ok: false, notProtected: true };
+  const noRules = { ok: true, data: [], rulesets: {} };
+  // Formato real devolvido por GET /repos/{o}/{r}/rules/branches/main.
+  const rulesetRules = [
+    { type: 'deletion', ruleset_id: 24854218 },
+    { type: 'pull_request', parameters: { required_approving_review_count: 0 }, ruleset_id: 24854218 },
+    { type: 'required_status_checks', parameters: { required_status_checks: [{ context: 'validate', integration_id: 15368 }] }, ruleset_id: 24854218 },
+  ];
+  const activeRuleset = { 24854218: { name: 'proteger-main', enforcement: 'active', bypass_actors: [] } };
 
-  it('protegida quando PR, check e administradores estão configurados', () => {
-    expect(deriveProtection({ ok: true, data: full }, 'validate').state).toBe('protegida');
+  describe('proteção clássica', () => {
+    it('protegida quando PR, check e administradores estão configurados', () => {
+      expect(deriveProtection({ classic: { ok: true, data: full }, rules: noRules }, 'validate').state).toBe('protegida');
+    });
+
+    it('desprotegida quando falta enforce_admins', () => {
+      const data = { ...full, enforce_admins: { enabled: false } };
+      const result = deriveProtection({ classic: { ok: true, data }, rules: noRules }, 'validate');
+      expect(result.state).toBe('desprotegida');
+      expect(result.detail).toContain('não vale para administradores');
+    });
   });
 
-  it('desprotegida quando falta enforce_admins', () => {
-    const data = { ...full, enforce_admins: { enabled: false } };
-    expect(deriveProtection({ ok: true, data }, 'validate').state).toBe('desprotegida');
+  describe('rulesets', () => {
+    it('protegida com ruleset ativo sem bypass, mesmo com a clássica dizendo "Branch not protected"', () => {
+      const result = deriveProtection({ classic: notProtected, rules: { ok: true, data: rulesetRules, rulesets: activeRuleset } }, 'validate');
+      expect(result.state).toBe('protegida');
+      expect(result.detail).toContain('ruleset "proteger-main"');
+    });
+
+    it('desprotegida quando o ruleset tem bypass_actors (não vale para administradores)', () => {
+      const rulesets = { 24854218: { ...activeRuleset[24854218], bypass_actors: [{ actor_type: 'RepositoryRole', actor_id: 5, bypass_mode: 'always' }] } };
+      const result = deriveProtection({ classic: notProtected, rules: { ok: true, data: rulesetRules, rulesets } }, 'validate');
+      expect(result.state).toBe('desprotegida');
+      expect(result.detail).toContain('não vale para administradores');
+    });
+
+    it('desprotegida quando o ruleset não exige o check', () => {
+      const data = rulesetRules.filter((rule) => rule.type !== 'required_status_checks');
+      const result = deriveProtection({ classic: notProtected, rules: { ok: true, data, rulesets: activeRuleset } }, 'validate');
+      expect(result.state).toBe('desprotegida');
+      expect(result.detail).toContain('check obrigatório ausente');
+    });
+
+    it('desprotegida quando o ruleset exige outro check', () => {
+      const data = rulesetRules.map((rule) => (rule.type === 'required_status_checks'
+        ? { ...rule, parameters: { required_status_checks: [{ context: 'outro' }] } } : rule));
+      expect(deriveProtection({ classic: notProtected, rules: { ok: true, data, rulesets: activeRuleset } }, 'validate').state).toBe('desprotegida');
+    });
+
+    it('sem detalhe do ruleset não presume ausência de bypass', () => {
+      const result = deriveProtection({ classic: notProtected, rules: { ok: true, data: rulesetRules, rulesets: {} } }, 'validate');
+      expect(result.state).toBe('desprotegida');
+    });
+
+    it('combina formatos: PR pela clássica e check pelo ruleset', () => {
+      const classicPrOnly = { ...full, required_status_checks: null };
+      const data = rulesetRules.filter((rule) => rule.type !== 'pull_request');
+      const result = deriveProtection({ classic: { ok: true, data: classicPrOnly }, rules: { ok: true, data, rulesets: activeRuleset } }, 'validate');
+      expect(result.state).toBe('protegida');
+    });
   });
 
-  it('desprotegida quando a API diz que não há proteção', () => {
-    expect(deriveProtection({ ok: false, notProtected: true }, 'validate').state).toBe('desprotegida');
-  });
+  describe('falhas de consulta', () => {
+    it('desprotegida quando nenhuma das duas APIs mostra proteção', () => {
+      expect(deriveProtection({ classic: notProtected, rules: noRules }, 'validate').state).toBe('desprotegida');
+    });
 
-  it('desconhecido quando a consulta falha', () => {
-    expect(deriveProtection({ ok: false, error: 'HTTP 403' }, 'validate').state).toBe('desconhecido');
-    expect(deriveProtection(null, 'validate').state).toBe('desconhecido');
+    it('desconhecido quando as duas consultas falham', () => {
+      expect(deriveProtection({ classic: { ok: false, error: 'HTTP 403' }, rules: { ok: false, error: 'HTTP 403' } }, 'validate').state).toBe('desconhecido');
+      expect(deriveProtection(null, 'validate').state).toBe('desconhecido');
+    });
+
+    it('desconhecido quando a clássica diz "não protegida" mas a consulta de rulesets falha', () => {
+      const result = deriveProtection({ classic: notProtected, rules: { ok: false, error: 'HTTP 500' } }, 'validate');
+      expect(result.state).toBe('desconhecido');
+      expect(result.detail).toContain('rulesets: HTTP 500');
+    });
+
+    it('protegida pela clássica mesmo se a consulta de rulesets falhar', () => {
+      expect(deriveProtection({ classic: { ok: true, data: full }, rules: { ok: false, error: 'HTTP 500' } }, 'validate').state).toBe('protegida');
+    });
   });
 });
 
@@ -201,7 +266,7 @@ describe('deriveProjectStatus', () => {
   });
 
   it('GitHub inacessível: tudo desconhecido, pendências desconhecidas', () => {
-    const status = deriveProjectStatus({ tasks: [ci], prs: null, pendencias: null, protection: { ok: false, error: 'offline' }, requiredCheck: 'validate' });
+    const status = deriveProjectStatus({ tasks: [ci], prs: null, pendencias: null, protection: { classic: { ok: false, error: 'offline' }, rules: { ok: false, error: 'offline' } }, requiredCheck: 'validate' });
     expect(status.tasks[0].state).toBe('desconhecido');
     expect(status.pendencias).toBeNull();
     expect(status.protection.state).toBe('desconhecido');
