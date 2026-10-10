@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveProjectStatus, deriveProtection, deriveTaskState, summarizeChecks } from '../lib/derive-status.mjs';
+import { blockedTasks, deriveProjectStatus, deriveProtection, deriveTaskState, summarizeChecks } from '../lib/derive-status.mjs';
 
 const GREEN = [{ status: 'COMPLETED', conclusion: 'SUCCESS' }];
 const RED = [{ status: 'COMPLETED', conclusion: 'FAILURE' }];
@@ -96,13 +96,26 @@ describe('deriveTaskState: um caso por estado', () => {
     expect(deriveTaskState(decision, [], [issue]).state).toBe('planejada');
   });
 
-  it('bloqueada: pendência aberta citando a tarefa no corpo', () => {
-    const issue = { number: 7, title: 'Orçamento de correção estourado', state: 'OPEN', body: 'Afeta TASK-001' };
+  it('bloqueada: pendência aberta com linha Bloqueia: no corpo', () => {
+    const issue = { number: 7, title: 'Orçamento de correção estourado', state: 'OPEN', body: 'Contexto.\n\nBloqueia: TASK-001, TASK-002' };
     expect(deriveTaskState(ci, [pr({})], [issue]).state).toBe('bloqueada');
   });
 
   it('desconhecido: GitHub inacessível', () => {
     expect(deriveTaskState(ci, null, null).state).toBe('desconhecido');
+  });
+});
+
+describe('blockedTasks', () => {
+  it('menção solta no corpo não bloqueia', () => {
+    const issue = { number: 6, title: 'TASK-004: decidir formato', state: 'OPEN', body: 'As TASK-001 a 003 seguem. Na revisão da TASK-001 também.' };
+    expect([...blockedTasks(issue)]).toEqual(['TASK-004']);
+    expect(deriveTaskState(ci, [pr({})], [issue]).state).toBe('implementada');
+  });
+
+  it('aceita a linha Bloqueia em negrito ou em item de lista', () => {
+    expect([...blockedTasks({ title: 'x', body: '**Bloqueia:** TASK-002, TASK-003' })]).toEqual(['TASK-002', 'TASK-003']);
+    expect([...blockedTasks({ title: 'x', body: '- Bloqueia: TASK-002' })]).toEqual(['TASK-002']);
   });
 });
 

@@ -32,9 +32,23 @@ export function taskIdFromTitle(title) {
   return match ? `TASK-${match[1]}` : null;
 }
 
-/** Pendência referencia a tarefa no título ou no corpo. */
+/**
+ * Tarefas que a pendência bloqueia: as citadas no título ou na linha `Bloqueia: TASK-NNN, ...` do corpo.
+ * Menção solta no corpo não bloqueia (ex.: "as TASK-001 a 003 seguem").
+ */
+export function blockedTasks(issue) {
+  const ids = new Set();
+  for (const match of String(issue.title ?? '').matchAll(/TASK-\d{3}/g)) ids.add(match[0]);
+  for (const line of String(issue.body ?? '').split(/\r?\n/)) {
+    const declared = /^\s*(?:[-*]\s*)?\**Bloqueia:?\**:?\s*(.*)$/i.exec(line);
+    if (!declared) continue;
+    for (const match of (declared[1] ?? '').matchAll(/TASK-\d{3}/g)) ids.add(match[0]);
+  }
+  return ids;
+}
+
 function mentions(issue, taskId) {
-  return `${issue.title ?? ''}\n${issue.body ?? ''}`.includes(taskId);
+  return blockedTasks(issue).has(taskId);
 }
 
 function byDateDesc(field) {

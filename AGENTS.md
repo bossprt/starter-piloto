@@ -21,7 +21,8 @@ Depende do dono (nunca faça; registre como pendência):
 - mudar escopo, contratar serviço, publicar produto, decidir campo `decisao_pendente`.
 
 Pendências: nunca pare o trabalho por uma. Abra issue com etiqueta `depende-de-mim`
-contendo: o que decidir/fazer, opções, recomendação, o que fica bloqueado.
+contendo: o que decidir/fazer, opções, recomendação, o que fica bloqueado,
+e a linha `Bloqueia: TASK-NNN, ...` (é o que o `npm run status` lê).
 Siga em tudo que não depende dela.
 
 Regras gerais:
