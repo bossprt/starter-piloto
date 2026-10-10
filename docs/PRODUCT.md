@@ -28,3 +28,5 @@ Este projeto é também o piloto do starter: serve para provar o fluxo de tarefa
 - Outros documentos (RG, CNH, PIS, título de eleitor).
 - Publicar o pacote no npm (publicar produto depende do dono).
 - Interface web ou API HTTP.
+
+<!-- teste de CI: PR só de documentação (será fechado sem merge) -->
