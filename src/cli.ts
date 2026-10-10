@@ -19,8 +19,22 @@ export const USAGE = [
   '',
   'Valida cada número como CPF (11 caracteres) ou CNPJ (14 caracteres), com ou sem máscara.',
   'Saída: uma linha por número, "<válido|inválido>\\t<cpf|cnpj|desconhecido>\\t<entrada>".',
+  'Na entrada, \\, tabulação, quebra de linha e outros caracteres de controle saem como escape.',
   'Código de saída: 0 se todos válidos, 1 se algum inválido, 2 para erro de uso.',
 ].join('\n');
+
+const ESCAPES: Readonly<Record<string, string>> = { '\\': '\\\\', '\t': '\\t', '\n': '\\n', '\r': '\\r' };
+
+/**
+ * Representa a entrada original em uma única linha e um único campo: `\`, tabulação,
+ * quebra de linha e outros caracteres de controle viram escapes (`\\`, `\t`, `\n`, `\r`, `\uXXXX`).
+ */
+export function escapeInput(input: string): string {
+  // eslint-disable-next-line no-control-regex
+  return input.replace(/[\\\u0000-\u001f\u007f]/g, (char) =>
+    ESCAPES[char] ?? `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`,
+  );
+}
 
 /** Executa a CLI com `args` (sem `node` e o script) e devolve o código de saída. */
 export function main(args: readonly string[], io: CliIo): number {
@@ -45,7 +59,7 @@ export function main(args: readonly string[], io: CliIo): number {
   for (const arg of args) {
     const { type, valid } = checkDocument(arg);
     if (!valid) allValid = false;
-    io.stdout(`${valid ? 'válido' : 'inválido'}\t${type}\t${arg}`);
+    io.stdout(`${valid ? 'válido' : 'inválido'}\t${type}\t${escapeInput(arg)}`);
   }
   return allValid ? EXIT_OK : EXIT_INVALID;
 }

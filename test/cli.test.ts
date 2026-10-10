@@ -58,6 +58,20 @@ describe('cpf-cnpj', () => {
     ]);
   });
 
+  it('escapa caracteres de controle e barra invertida da entrada para manter uma linha e três campos', () => {
+    const result = run('52998224725\n', 'a\tb', 'x\r\\y', '\u0001');
+    expect(result.stdout).toEqual([
+      'válido\tcpf\t52998224725\\n',
+      'inválido\tdesconhecido\ta\\tb',
+      'inválido\tdesconhecido\tx\\r\\\\y',
+      'inválido\tdesconhecido\t\\u0001',
+    ]);
+    for (const line of result.stdout) {
+      expect(line).not.toMatch(/[\r\n]/);
+      expect(line.split('\t')).toHaveLength(3);
+    }
+  });
+
   it('--help mostra uso em stdout e sai com 0', () => {
     const result = run('--help');
     expect(result.code).toBe(EXIT_OK);

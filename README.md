@@ -20,6 +20,8 @@ inválido	desconhecido	123
 ```
 
 - Tipo detectado pelo tamanho após remover a máscara (`.`, `-`, `/`): 11 = CPF, 14 = CNPJ.
+- A entrada original sai como foi passada, exceto `\`, tabulação, quebra de linha e outros
+  caracteres de controle, que saem como escape (`\\`, `\t`, `\n`, `\r`, `\uXXXX`).
 - CNPJ alfanumérico aceito (letras maiúsculas nas 12 primeiras posições).
 - Código de saída: `0` se todos válidos; `1` se algum inválido; `2` para erro de uso
   (nenhum argumento ou opção desconhecida, com mensagem em stderr).
