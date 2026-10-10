@@ -18,7 +18,8 @@
     "test": "vitest run",
     "check:structure": "node scripts/check-structure.mjs",
     "validate": "node scripts/validate.mjs",
-    "status": "node scripts/project-status.mjs"
+    "status": "node scripts/project-status.mjs",
+    "uso": "node scripts/uso.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
