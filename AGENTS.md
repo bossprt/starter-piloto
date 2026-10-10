@@ -1,12 +1,8 @@
 # AGENTS.md — roteador
 
 Biblioteca + CLI de validação de CPF e CNPJ em TypeScript (Vitest, ESLint).
-Este arquivo é o ponto de partida de qualquer agente. Leia só o que a situação pede.
-
-## Não leia todos os docs
-
-Proibido ler `docs/` inteiro por padrão. Use a tabela "O que ler" abaixo.
-Para saber o estado do projeto, rode `npm run status`; não deduza estado lendo arquivos.
+Ponto de partida de qualquer agente. Leia só o que a situação pede: proibido ler `docs/` inteiro.
+Estado do projeto: `npm run status` (não deduza estado lendo arquivos).
 
 ## Papéis (ADR 0002)
 
@@ -14,49 +10,48 @@ Para saber o estado do projeto, rode `npm run status`; não deduza estado lendo 
 - **Revisor:** Codex, só leitura, via `node scripts/codex-review.mjs`. Nunca escreve, commita ou integra.
 - Proibido rodar o Codex com `danger-full-access`.
 
-## Regra de coordenação
+## Regra de coordenação (ADR 0003)
 
 Autorizado sem pedir aprovação:
 - programar, testar, abrir PRs com "TASK-NNN" no título;
-- integrar PR de tarefa com `validation: ci` quando o CI estiver verde
-  e a proteção da main estiver confirmada (`npm run status` mostra "protegida");
-- integrar `validation: ci+revisao` nas mesmas condições e com a última revisão do Codex
-  sem defeito aberto (aplique a etiqueta `revisao-sem-defeito` no PR antes do merge).
+- integrar `validation: ci+revisao` (padrão) ou `ci` com CI verde, main "protegida" no status e,
+  para `ci+revisao`, a última revisão do Codex sem defeito aberto (etiqueta `revisao-sem-defeito`).
 
-Depende do dono (nunca faça; registre como pendência):
-- login em conta, credenciais, qualquer coisa que gere cobrança nova;
-- aplicar a etiqueta `aceite-humano` ou integrar tarefa com `validation: ci+humano`;
-- mudar escopo, contratar serviço, publicar produto, decidir campo `decisao_pendente`.
+O dono só entra em (registre como pendência, nunca faça):
+- escolha de produto ou direção: escopo, formato público, ferramenta/serviço, `decisao_pendente`;
+- ação que consome cota ou gera custo além do orçamento (`docs/regras/gastos.md`), login, credenciais;
+- ação irreversível: apagar dados ou histórico, publicar produto, mexer em repositório/ruleset;
+- etiqueta `aceite-humano` e integração de tarefa `ci+humano` (só tarefas que são decisão de produto).
 
-Pendências: nunca pare o trabalho por uma. Abra issue com etiqueta `depende-de-mim`
-contendo: o que decidir/fazer, opções, recomendação, o que fica bloqueado,
-e a linha `Bloqueia: TASK-NNN, ...` (é o que o `npm run status` lê).
-Siga em tudo que não depende dela. Só o dono fecha pendência `depende-de-mim`.
+Pendências: nunca pare por uma. Issue com etiqueta `depende-de-mim`: o que decidir, opções,
+recomendação, o que fica bloqueado e a linha `Bloqueia: TASK-NNN` (lida pelo `npm run status`;
+não use em pendência de aceite humano). Siga no que não depende dela. Só o dono fecha pendência.
 
 Regras gerais:
-- Nunca declare algo como validado. Estado vem de PRs e CI (`npm run status`).
-- Sem acesso a GitHub: estado "desconhecido". Nunca presuma aprovado.
+- Nunca declare algo como validado. Estado vem de PRs e CI. Sem GitHub: "desconhecido".
 - Não invente métricas. Sem dado: "não disponível".
 - Máximo 3 ciclos de correção (CI ou revisão) por tarefa. Estourou: pendência e próxima tarefa.
 - Scripts em Node (`.mjs`), sem bash.
+- **Arquivos do starter só mudam em PR próprio** (lista no ADR 0003), nunca no PR de tarefa.
+- **Assinatura:** todo commit termina com `Agente: <ferramenta> (<modelo>)`; todo PR traz
+  `Executor:` e `Revisor:` no corpo.
+- Tarefa só cita comando que já existe, ou diz que a tarefa o cria.
 
 ## Fluxo de tarefa
 
 1. Ler `docs/tasks/TASK-NNN.md` (só a tarefa em execução e o que ela citar).
-2. Conferir dependências em `depends_on` com `npm run status`.
-   Se a tarefa tem `decisao_pendente`: não implemente; abra pendência e vá para outra.
-3. Criar branch `task/NNN-slug` a partir da `main` atualizada (`npm ci` se faltar `node_modules`).
+2. Conferir `depends_on` com `npm run status`. Tarefa com `decisao_pendente`: pendência e outra tarefa.
+3. Branch `task/NNN-slug` a partir da `main` atualizada (`npm ci` se faltar `node_modules`).
 4. Implementar com testes. Código em `src/`, testes em `test/`.
 5. Rodar `npm run validate` até passar.
-6. Abrir PR com "TASK-NNN" no título; corpo com critérios atendidos e
-   seção "Revisão" (resultado da revisão independente ou "revisão: não realizada").
-7. Pedir revisão ao Codex: `node scripts/codex-review.mjs --task TASK-NNN` (só leitura; o prompt
-   já pede correção, segurança, manutenção e conflito com `docs/decisions/`). Registrar no PR:
-   apontado, corrigido, descartado e por quê. Codex falhou: "revisão: não realizada" + causa.
-8. Só depois da revisão registrada: se `validation: ci`, CI verde e main protegida, integrar
-   (squash) e apagar a branch. Se `validation: ci+humano`: não integrar; abrir pendência
-   de aceite humano com instruções de como o dono testa (sem linha `Bloqueia:`).
-9. Registrar a sessão em `docs/metrics/sessions.md`.
+6. Revisão do Codex **antes do push**: `node scripts/codex-review.mjs --task TASK-NNN`
+   (demora minutos: rode em segundo plano). Corrigir defeito real; registrar o descartado e o porquê.
+   Codex falhou: "revisão: não realizada" + causa (e a tarefa não é integrada automaticamente).
+7. Um push, PR com "TASK-NNN" no título; corpo com critérios atendidos, seção "Revisão"
+   (apontado, corrigido, descartado) e linhas `Executor:` / `Revisor:`.
+8. Integrar (squash, apagar branch) só nas condições da regra de coordenação.
+   `ci+humano`: não integrar; pendência de aceite com instruções de teste.
+9. Registrar a sessão em `docs/metrics/sessions.md` (pode ir no PR da tarefa).
 
 ## O que ler em cada situação
 
@@ -66,24 +61,22 @@ Regras gerais:
 | Estado do projeto / próxima tarefa | `npm run status` (não leia arquivos para isso) |
 | Entender o produto e o fora de escopo | `docs/PRODUCT.md` |
 | Restrições técnicas | `docs/ARCHITECTURE.md` |
-| Por que a stack é esta | `docs/decisions/0001-stack.md` |
-| Papéis executor/revisor, por que o Codex só revisa | `docs/decisions/0002-papeis-executor-revisor.md` |
+| Por que a stack / os papéis / o papel do humano | `docs/decisions/` (0001 stack, 0002 papéis, 0003 humano) |
 | Decisão de direção (o que construir, qual ferramenta) | `docs/regras/direcao.md` |
 | Escolher ferramenta, biblioteca ou arquitetura | `docs/regras/pesquisa.md` e `docs/regras/ferramentas.md` |
 | Projeto passar a ser comercial | `docs/regras/custos.md` |
 | Registrar sessão (tokens, cota, ciclos) | `docs/metrics/sessions.md` |
-| Mexer nos scripts do starter | `scripts/` (comece por `scripts/validate.mjs`) |
+| Mexer nos scripts do starter | `scripts/` (comece por `scripts/validate.mjs`), em PR próprio |
 
 ## Comandos
 
-- `npm run validate` — lint, typecheck, testes, checagens de estrutura. Mesmo comando do CI.
+- `npm run validate` — lint, typecheck, build, testes, checagens de estrutura. Mesmo comando do CI.
 - `npm run status` — estado das tarefas, próxima tarefa, proteção da main, pendências.
-- `npm test` — só testes.
 - `node scripts/codex-review.mjs --task TASK-NNN` — revisão do Codex em somente leitura.
 
 ## Convenções
 
 - Tarefas: frontmatter `id, title, depends_on, validation, test_command`; sem status/owner/evidence.
-  `validation`: `ci`, `ci+humano` (etiqueta `aceite-humano`, só o dono) ou `ci+revisao`.
+  `validation`: `ci+revisao` (padrão), `ci` ou `ci+humano` (só decisão de produto).
 - ADRs: `docs/decisions/NNNN-slug.md`, numeração sequencial.
 - Este arquivo tem no máximo 100 linhas (checado pelo validate).
