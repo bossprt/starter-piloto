@@ -2,7 +2,7 @@
 // Entrada: tarefas (frontmatter), histórico de PRs, pendências e proteção da main.
 // Evidência vem só do histórico de PRs, nunca de branches.
 
-export const TASK_ID_PATTERN = /TASK-(\d{3})/;
+export const TASK_ID_PATTERN = /(?<![\w-])TASK-(\d{3})(?![\w-])/;
 
 /**
  * Resume os checks de um PR.
@@ -32,9 +32,26 @@ export function taskIdFromTitle(title) {
   return match ? `TASK-${match[1]}` : null;
 }
 
-/** Pendência referencia a tarefa no título ou no corpo. */
+/**
+ * Tarefas que a pendência bloqueia: as citadas no título ou na linha `Bloqueia: TASK-NNN, ...` do corpo.
+ * Menção solta no corpo não bloqueia (ex.: "as TASK-001 a 003 seguem").
+ */
+export function blockedTasks(issue) {
+  const ids = new Set();
+  // Identificador completo: não casa TASK-0010 nem TASK-001ABC.
+  const taskIds = (text) => String(text ?? '').matchAll(/(?<![\w-])TASK-\d{3}(?![\w-])/g);
+  for (const match of taskIds(issue.title)) ids.add(match[0]);
+  for (const line of String(issue.body ?? '').split(/\r?\n/)) {
+    // Exige os dois-pontos: "Bloqueia:", "**Bloqueia:**" ou "**Bloqueia**:", opcionalmente em item de lista.
+    const declared = /^\s*(?:[-*]\s+)?(?:\*\*Bloqueia:\*\*|\*\*Bloqueia\*\*:|Bloqueia:)\s*(.*)$/i.exec(line);
+    if (!declared) continue;
+    for (const match of taskIds(declared[1])) ids.add(match[0]);
+  }
+  return ids;
+}
+
 function mentions(issue, taskId) {
-  return `${issue.title ?? ''}\n${issue.body ?? ''}`.includes(taskId);
+  return blockedTasks(issue).has(taskId);
 }
 
 function byDateDesc(field) {
