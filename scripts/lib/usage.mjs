@@ -7,7 +7,7 @@ export const QUOTA_STOP_PERCENT = 70;
  * Soma os eventos `result` (uma sessão pode ter mais de um) e pega o último `rate_limit_event`.
  */
 export function summarizeClaudeStream(text) {
-  const summary = { input: 0, cacheCreation: 0, cacheRead: 0, output: 0, turns: 0, costUsd: null, contextTokens: null, tools: null, fiveHour: null, sevenDay: null };
+  const summary = { input: 0, cacheCreation: 0, cacheRead: 0, output: 0, turns: 0, costUsd: null, contextTokens: null, tools: null, fiveHour: null, sevenDay: null, fiveHourResetsAt: null, sevenDayResetsAt: null };
   for (const line of String(text ?? '').split('\n')) {
     let event;
     try {
@@ -31,8 +31,14 @@ export function summarizeClaudeStream(text) {
     }
     if (event.type === 'rate_limit_event') {
       const windows = event.rate_limit_info?.unifiedWindows ?? {};
-      if (windows.five_hour) summary.fiveHour = Math.round(windows.five_hour.utilization * 1000) / 10;
-      if (windows.seven_day) summary.sevenDay = Math.round(windows.seven_day.utilization * 1000) / 10;
+      if (windows.five_hour) {
+        summary.fiveHour = Math.round(windows.five_hour.utilization * 1000) / 10;
+        summary.fiveHourResetsAt = windows.five_hour.resetsAt ?? null;
+      }
+      if (windows.seven_day) {
+        summary.sevenDay = Math.round(windows.seven_day.utilization * 1000) / 10;
+        summary.sevenDayResetsAt = windows.seven_day.resetsAt ?? null;
+      }
     }
   }
   summary.totalInput = summary.input + summary.cacheCreation + summary.cacheRead;
@@ -53,7 +59,12 @@ export function lastCodexRateLimits(text) {
     }
   }
   if (!last) return null;
-  return { fiveHour: last.primary?.used_percent ?? null, weekly: last.secondary?.used_percent ?? null };
+  return {
+    fiveHour: last.primary?.used_percent ?? null,
+    weekly: last.secondary?.used_percent ?? null,
+    fiveHourResetsAt: last.primary?.resets_at ?? null,
+    weeklyResetsAt: last.secondary?.resets_at ?? null,
+  };
 }
 
 function findKey(value, key) {
@@ -64,6 +75,16 @@ function findKey(value, key) {
     if (found) return found;
   }
   return null;
+}
+
+/**
+ * Percentual ainda válido: depois do reset da janela (epoch em segundos) a leitura antiga não vale mais.
+ * @returns {{ percent: number | null, expired: boolean }}
+ */
+export function currentPercent(percent, resetsAtSeconds, nowMs = Date.now()) {
+  if (typeof percent !== 'number') return { percent: null, expired: false };
+  if (typeof resetsAtSeconds === 'number' && resetsAtSeconds * 1000 <= nowMs) return { percent: null, expired: true };
+  return { percent, expired: false };
 }
 
 /** Percentuais em 70% ou mais (regra de parada). Ignora valores não disponíveis. */

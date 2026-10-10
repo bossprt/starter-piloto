@@ -7,7 +7,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { lastCodexRateLimits, quotaAlerts, summarizeClaudeStream } from './lib/usage.mjs';
+import { QUOTA_STOP_PERCENT, currentPercent, lastCodexRateLimits, quotaAlerts, summarizeClaudeStream } from './lib/usage.mjs';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 
@@ -37,6 +37,13 @@ function gh(args) {
   }
 }
 
+// Linha de cota: leitura expirada (janela já reiniciada) vira "não disponível"; mostra o reset.
+function quotaRow(name, percent, resetsAt, source) {
+  const value = currentPercent(percent, resetsAt);
+  const reset = typeof resetsAt === 'number' ? `; reset ${when(resetsAt * 1000)}` : '';
+  return { name, percent: value.percent, source: value.expired ? `leitura expirada (janela reiniciada)${reset}` : `${source}${reset}` };
+}
+
 const when = (ms) => `${new Date(ms).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 const rows = [];
 
@@ -44,16 +51,16 @@ const rows = [];
 const claudeLog = newestFile(join(ROOT, '.agent-logs'), (name) => name.endsWith('.jsonl'));
 const claude = claudeLog ? summarizeClaudeStream(readFileSync(claudeLog.path, 'utf8')) : null;
 const claudeSource = claudeLog ? `sessão de ${when(claudeLog.mtimeMs)}` : 'sem sessão em .agent-logs/';
-rows.push({ name: 'Claude Code — janela 5h', percent: claude?.fiveHour ?? null, source: claudeSource });
-rows.push({ name: 'Claude Code — 7 dias', percent: claude?.sevenDay ?? null, source: claudeSource });
+rows.push(quotaRow('Claude Code — janela 5h', claude?.fiveHour ?? null, claude?.fiveHourResetsAt ?? null, claudeSource));
+rows.push(quotaRow('Claude Code — 7 dias', claude?.sevenDay ?? null, claude?.sevenDayResetsAt ?? null, claudeSource));
 
 // Codex: última sessão em ~/.codex/sessions (gravada pelo codex-review.mjs ou qualquer uso do Codex).
 const codexDir = join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'sessions');
 const codexLog = newestFile(codexDir, (name) => name.startsWith('rollout-') && name.endsWith('.jsonl'));
 const codex = codexLog ? lastCodexRateLimits(readFileSync(codexLog.path, 'utf8')) : null;
 const codexSource = codexLog ? `sessão de ${when(codexLog.mtimeMs)}` : 'sem sessão do Codex';
-rows.push({ name: 'Codex — janela 5h', percent: codex?.fiveHour ?? null, source: codexSource });
-rows.push({ name: 'Codex — semanal', percent: codex?.weekly ?? null, source: codexSource });
+rows.push(quotaRow('Codex — janela 5h', codex?.fiveHour ?? null, codex?.fiveHourResetsAt ?? null, codexSource));
+rows.push(quotaRow('Codex — semanal', codex?.weekly ?? null, codex?.weeklyResetsAt ?? null, codexSource));
 
 // GitHub API: limite por hora do token.
 const core = gh(['api', 'rate_limit'])?.resources?.core;
@@ -65,8 +72,10 @@ rows.push({
 
 // GitHub Actions: repositório público com runner padrão é grátis (sem limite de minutos).
 // Mede execuções e minutos do mês, e execuções por PR (indicador de "um push por tarefa").
-const repo = gh(['repo', 'view', '--json', 'nameWithOwner']);
-let actions = 'gh indisponível';
+// Com a API em 70% ou mais, não gasta mais requisições (regra de parada).
+const apiStopped = core && (core.used / core.limit) * 100 >= QUOTA_STOP_PERCENT;
+const repo = apiStopped ? null : gh(['repo', 'view', '--json', 'nameWithOwner']);
+let actions = apiStopped ? 'não consultado: API do GitHub em 70% ou mais' : 'gh indisponível';
 if (repo) {
   const month = new Date().toISOString().slice(0, 7);
   // Pagina até cobrir total_count (100 por página).

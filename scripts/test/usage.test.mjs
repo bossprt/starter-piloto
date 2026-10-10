@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lastCodexRateLimits, quotaAlerts, summarizeClaudeStream } from '../lib/usage.mjs';
+import { currentPercent, lastCodexRateLimits, quotaAlerts, summarizeClaudeStream } from '../lib/usage.mjs';
 
 const stream = [
   JSON.stringify({ type: 'system', subtype: 'init', tools: ['Bash', 'Read'] }),
@@ -28,7 +28,7 @@ describe('lastCodexRateLimits', () => {
       JSON.stringify({ type: 'event_msg', payload: { type: 'token_count', rate_limits: { primary: { used_percent: 1 }, secondary: { used_percent: 0 } } } }),
       JSON.stringify({ type: 'event_msg', payload: { type: 'token_count', rate_limits: { primary: { used_percent: 21 }, secondary: { used_percent: 3 } } } }),
     ].join('\n');
-    expect(lastCodexRateLimits(rollout)).toEqual({ fiveHour: 21, weekly: 3 });
+    expect(lastCodexRateLimits(rollout)).toMatchObject({ fiveHour: 21, weekly: 3 });
     expect(lastCodexRateLimits('nada')).toBeNull();
   });
 });
@@ -37,5 +37,26 @@ describe('quotaAlerts (regra dos 70%)', () => {
   it('alerta em 70% ou mais e ignora não disponível', () => {
     const alerts = quotaAlerts([{ name: 'a', percent: 69.9 }, { name: 'b', percent: 70 }, { name: 'c', percent: null }, { name: 'd', percent: 95 }]);
     expect(alerts.map((a) => a.name)).toEqual(['b', 'd']);
+  });
+});
+
+describe('currentPercent (reset da janela)', () => {
+  const now = Date.parse('2026-10-10T22:00:00Z');
+  it('leitura antes do reset vale', () => {
+    expect(currentPercent(90, now / 1000 + 600, now)).toEqual({ percent: 90, expired: false });
+  });
+  it('leitura depois do reset expira e não bloqueia', () => {
+    expect(currentPercent(90, now / 1000 - 1, now)).toEqual({ percent: null, expired: true });
+    expect(quotaAlerts([{ name: 'x', percent: currentPercent(90, now / 1000 - 1, now).percent }])).toEqual([]);
+  });
+  it('sem reset conhecido mantém o valor; sem valor é não disponível', () => {
+    expect(currentPercent(50, null, now)).toEqual({ percent: 50, expired: false });
+    expect(currentPercent(null, 1, now)).toEqual({ percent: null, expired: false });
+  });
+  it('lê os horários de reset do Claude e do Codex', () => {
+    const claude = summarizeClaudeStream(JSON.stringify({ type: 'rate_limit_event', rate_limit_info: { unifiedWindows: { five_hour: { utilization: 0.2, resetsAt: 111 }, seven_day: { utilization: 0.04, resetsAt: 222 } } } }));
+    expect(claude).toMatchObject({ fiveHourResetsAt: 111, sevenDayResetsAt: 222 });
+    const codex = lastCodexRateLimits(JSON.stringify({ payload: { rate_limits: { primary: { used_percent: 5, resets_at: 333 }, secondary: { used_percent: 1, resets_at: 444 } } } }));
+    expect(codex).toEqual({ fiveHour: 5, weekly: 1, fiveHourResetsAt: 333, weeklyResetsAt: 444 });
   });
 });
