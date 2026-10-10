@@ -1,0 +1,28 @@
+{
+  "name": "starter-piloto",
+  "version": "0.1.0",
+  "description": "Biblioteca e CLI de validação de CPF e CNPJ (piloto do starter).",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check:structure": "node scripts/check-structure.mjs",
+    "validate": "node scripts/validate.mjs",
+    "status": "node scripts/project-status.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.20.5",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.1",
+    "vitest": "^5.0.3"
+  }
+}
