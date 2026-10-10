@@ -40,7 +40,10 @@ function loadTasks() {
 
 function collect() {
   const repo = ghJson(['repo', 'view', '--json', 'nameWithOwner']);
-  if (!repo.ok) return { prs: null, pendencias: null, protection: { ok: false, error: `repositório inacessível: ${repo.error}` } };
+  if (!repo.ok) {
+    const error = `repositório inacessível: ${repo.error}`;
+    return { prs: null, pendencias: null, protection: { classic: { ok: false, error }, rules: { ok: false, error } } };
+  }
   const name = repo.data.nameWithOwner;
 
   const prsResult = ghJson([
@@ -51,20 +54,31 @@ function collect() {
     'issue', 'list', '--state', 'all', '--label', 'depende-de-mim', '--limit', '500',
     '--json', 'number,title,state,body',
   ]);
-  const protectionRaw = gh(['api', `repos/${name}/branches/main/protection`]);
-  let protection;
-  if (protectionRaw.ok) {
-    protection = { ok: true, data: JSON.parse(protectionRaw.stdout) };
-  } else if (/Branch not protected/i.test(protectionRaw.error)) {
-    protection = { ok: false, notProtected: true };
-  } else {
-    protection = { ok: false, error: protectionRaw.error };
-  }
   return {
     prs: prsResult.ok ? prsResult.data : null,
     pendencias: issuesResult.ok ? issuesResult.data : null,
-    protection,
+    protection: { classic: collectClassic(name), rules: collectRules(name) },
   };
+}
+
+// Proteção clássica: GET /repos/{owner}/{repo}/branches/main/protection.
+function collectClassic(name) {
+  const raw = gh(['api', `repos/${name}/branches/main/protection`]);
+  if (raw.ok) return { ok: true, data: JSON.parse(raw.stdout) };
+  if (/Branch not protected/i.test(raw.error)) return { ok: false, notProtected: true };
+  return { ok: false, error: raw.error };
+}
+
+// Rulesets: regras efetivas da branch + detalhe de cada ruleset (bypass_actors, enforcement).
+function collectRules(name) {
+  const rules = ghJson(['api', `repos/${name}/rules/branches/main`]);
+  if (!rules.ok) return { ok: false, error: rules.error };
+  const rulesets = {};
+  for (const id of new Set(rules.data.map((rule) => rule.ruleset_id))) {
+    const detail = ghJson(['api', `repos/${name}/rulesets/${id}`]);
+    rulesets[id] = detail.ok ? detail.data : { error: detail.error };
+  }
+  return { ok: true, data: rules.data, rulesets };
 }
 
 function render(status) {

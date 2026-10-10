@@ -128,28 +128,99 @@ export function deriveTaskState(task, prs, pendencias) {
   return { state: 'planejada', detail: 'nenhum PR', attempts };
 }
 
-/**
- * Proteção da main a partir da resposta da API.
- * @param {{ ok: true, data: any } | { ok: false, notProtected?: boolean, error?: string } | null} result
- * @param {string} requiredCheck nome do check exigido
- */
-export function deriveProtection(result, requiredCheck) {
-  if (!result) return { state: 'desconhecido', detail: 'consulta não realizada' };
-  if (!result.ok) {
-    if (result.notProtected) return { state: 'desprotegida', detail: 'API: Branch not protected' };
-    return { state: 'desconhecido', detail: result.error ?? 'erro na consulta' };
-  }
-  const data = result.data ?? {};
+const REQUIREMENTS = ['pr', 'check'];
+const REQUIREMENT_LABEL = { pr: 'PR obrigatório', check: 'check obrigatório' };
+
+/** Requisitos atendidos pela proteção clássica. */
+function classicRequirements(data, requiredCheck) {
   const contexts = [
     ...(data.required_status_checks?.contexts ?? []),
     ...((data.required_status_checks?.checks ?? []).map((check) => check.context)),
   ];
+  const enforced = data.enforce_admins?.enabled === true;
+  const found = {};
+  if (data.required_pull_request_reviews) found.pr = { source: 'proteção clássica', enforced };
+  if (contexts.includes(requiredCheck)) found.check = { source: 'proteção clássica', enforced };
+  return found;
+}
+
+/**
+ * Um ruleset vale para administradores?
+ * Política do starter: **qualquer** bypass_actors invalida a garantia (mesmo bypass só de app),
+ * porque a integração automática depende dela. Devolve true, false ou null (não determinado).
+ */
+function rulesetEnforced(ruleset) {
+  if (!ruleset || ruleset.error) return null; // detalhe não obtido
+  if (ruleset.enforcement !== 'active') return false;
+  // A API omite bypass_actors quando o solicitante não pode vê-los: ausência não é lista vazia.
+  if (!Array.isArray(ruleset.bypass_actors)) return null;
+  return ruleset.bypass_actors.length === 0;
+}
+
+const RANK = { true: 2, null: 1, false: 0 };
+
+/** Requisitos atendidos pelas regras efetivas (rulesets) da branch. */
+function rulesetRequirements(rules, rulesets, requiredCheck) {
+  const found = {};
+  for (const rule of rules) {
+    const ruleset = rulesets[rule.ruleset_id];
+    const enforced = rulesetEnforced(ruleset);
+    const source = `ruleset "${ruleset?.name ?? rule.ruleset_id}"`;
+    let key = null;
+    if (rule.type === 'pull_request') key = 'pr';
+    if (rule.type === 'required_status_checks'
+      && (rule.parameters?.required_status_checks ?? []).some((check) => check.context === requiredCheck)) key = 'check';
+    if (key && (!found[key] || RANK[String(enforced)] > RANK[String(found[key].enforced)])) found[key] = { source, enforced };
+  }
+  return found;
+}
+
+/**
+ * Proteção da main combinando os dois formatos do GitHub.
+ * Protegida = PR obrigatório e check obrigatório, ambos sem bypass para administradores,
+ * vindos da proteção clássica (enforce_admins) ou de ruleset ativo sem bypass_actors.
+ * @param {{
+ *   classic: { ok: true, data: any } | { ok: false, notProtected?: boolean, error?: string } | null,
+ *   rules?: { ok: true, data: any[], rulesets: Record<string, any> } | { ok: false, error?: string } | null,
+ * } | null} input
+ * @param {string} requiredCheck nome do check exigido
+ */
+export function deriveProtection(input, requiredCheck) {
+  const classic = input?.classic ?? null;
+  const rules = input?.rules ?? null;
+  const classicKnown = Boolean(classic) && (classic.ok || classic.notProtected === true);
+  const rulesKnown = Boolean(rules) && rules.ok;
+  if (!classicKnown && !rulesKnown) {
+    const errors = [classic?.error, rules?.error].filter(Boolean).join('; ');
+    return { state: 'desconhecido', detail: errors || 'consulta não realizada' };
+  }
+
+  const fromClassic = classic?.ok ? classicRequirements(classic.data ?? {}, requiredCheck) : {};
+  const fromRules = rulesKnown ? rulesetRequirements(rules.data ?? [], rules.rulesets ?? {}, requiredCheck) : {};
+  const sources = [];
   const problems = [];
-  if (!data.required_pull_request_reviews) problems.push('PR não obrigatório');
-  if (!contexts.includes(requiredCheck)) problems.push(`check "${requiredCheck}" não obrigatório`);
-  if (!data.enforce_admins?.enabled) problems.push('não vale para administradores');
-  if (problems.length > 0) return { state: 'desprotegida', detail: problems.join('; ') };
-  return { state: 'protegida', detail: `PR obrigatório; check "${requiredCheck}" obrigatório; vale para administradores` };
+  const undetermined = [];
+  for (const key of REQUIREMENTS) {
+    const options = [fromClassic[key], fromRules[key]].filter(Boolean);
+    const best = options.find((option) => option.enforced === true)
+      ?? options.find((option) => option.enforced === null)
+      ?? options[0];
+    if (!best) problems.push(`${REQUIREMENT_LABEL[key]} ausente`);
+    else if (best.enforced === null) undetermined.push(`${REQUIREMENT_LABEL[key]} (${best.source}): bypass não determinado`);
+    else if (!best.enforced) problems.push(`${REQUIREMENT_LABEL[key]} (${best.source}) tem bypass ou não está ativo`);
+    else sources.push(`${REQUIREMENT_LABEL[key]} via ${best.source}`);
+  }
+
+  if (problems.length === 0 && undetermined.length === 0) {
+    return { state: 'protegida', detail: `${sources.join('; ')}; check "${requiredCheck}"; sem bypass (vale para administradores)` };
+  }
+  // Uma das fontes falhou: o que falta pode estar nela.
+  if (!classicKnown || !rulesKnown) {
+    const failed = !classicKnown ? `proteção clássica: ${classic?.error ?? 'não consultada'}` : `rulesets: ${rules?.error ?? 'não consultados'}`;
+    return { state: 'desconhecido', detail: [...problems, ...undetermined, failed].join('; ') };
+  }
+  if (problems.length === 0) return { state: 'desconhecido', detail: undetermined.join('; ') };
+  return { state: 'desprotegida', detail: [...problems, ...undetermined].join('; ') };
 }
 
 /**
