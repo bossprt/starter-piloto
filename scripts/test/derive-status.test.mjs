@@ -90,7 +90,7 @@ describe('deriveTaskState: um caso por estado', () => {
     const merged = pr({ title: 'TASK-004: json', state: 'MERGED', mergedAt: '2026-10-10T11:00:00Z' });
     const result = deriveTaskState(task, [merged], []);
     expect(result.state).toBe('integrada');
-    expect(result.detail).toContain('sem etiqueta revisao-sem-defeito');
+    expect(result.detail).toContain('sem revisão registrada');
   });
 
   it('bloqueada (aguardando decisão): decisao_pendente com pendência aberta', () => {

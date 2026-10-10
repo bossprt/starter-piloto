@@ -25,3 +25,20 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run validate
+
+  # ADR 0004: exige o registro da revisão do Codex no commit de topo e a assinatura (trailer Agente:)
+  # em todos os commits do PR. Não precisa de npm ci: o script não tem dependências.
+  revisao-registrada:
+    name: revisao-registrada
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: node scripts/check-review-record.mjs --base ${{ github.event.pull_request.base.sha }}

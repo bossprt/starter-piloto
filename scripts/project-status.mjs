@@ -48,8 +48,9 @@ function collect() {
 
   const prsResult = ghJson([
     'pr', 'list', '--state', 'all', '--limit', '500',
-    '--json', 'number,title,state,isDraft,createdAt,mergedAt,closedAt,labels,statusCheckRollup,headRefName',
+    '--json', 'number,title,state,isDraft,createdAt,mergedAt,closedAt,labels,statusCheckRollup,headRefName,headRefOid',
   ]);
+  if (prsResult.ok) attachReviewHeads(name, prsResult.data);
   const issuesResult = ghJson([
     'issue', 'list', '--state', 'all', '--label', 'depende-de-mim', '--limit', '500',
     '--json', 'number,title,state,body',
@@ -59,6 +60,16 @@ function collect() {
     pendencias: issuesResult.ok ? issuesResult.data : null,
     protection: { classic: collectClassic(name), rules: collectRules(name) },
   };
+}
+
+// Commit de topo (mensagem e árvore) dos PRs de tarefa abertos ou integrados, para verificar o registro
+// da revisão do Codex (ADR 0004). Só PRs com TASK-NNN no título.
+function attachReviewHeads(name, prs) {
+  for (const pr of prs) {
+    if (!/TASK-\d{3}/.test(pr.title) || pr.state === 'CLOSED' || !pr.headRefOid) continue;
+    const commit = ghJson(['api', `repos/${name}/commits/${pr.headRefOid}`]);
+    if (commit.ok) pr.reviewHead = { message: commit.data.commit.message, tree: commit.data.commit.tree.sha };
+  }
 }
 
 // Proteção clássica: GET /repos/{owner}/{repo}/branches/main/protection.

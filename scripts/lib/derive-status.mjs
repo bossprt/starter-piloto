@@ -2,6 +2,8 @@
 // Entrada: tarefas (frontmatter), histórico de PRs, pendências e proteção da main.
 // Evidência vem só do histórico de PRs, nunca de branches.
 
+import { verifyReviewRecord } from './review-record.mjs';
+
 export const TASK_ID_PATTERN = /(?<![\w-])TASK-(\d{3})(?![\w-])/;
 
 /**
@@ -105,13 +107,27 @@ export function deriveTaskState(task, prs, pendencias) {
     const checks = summarizeChecks(pr.statusCheckRollup);
     const labels = (pr.labels ?? []).map((label) => (typeof label === 'string' ? label : label.name));
     const ciOk = checks === 'verdes';
-    // Evidência extra exigida pelo tipo de validação, sempre por etiqueta no PR.
-    const extraLabel = { 'ci+humano': 'aceite-humano', 'ci+revisao': 'revisao-sem-defeito' }[task.validation];
-    const extraOk = !extraLabel || labels.includes(extraLabel);
-    if (ciOk && extraOk) {
-      return { state: 'validada', detail: `PR #${pr.number} integrado, checks verdes${extraLabel ? `, ${extraLabel}` : ''}${history}`, pr: pr.number, attempts };
+    // Evidência extra exigida pelo tipo de validação.
+    // ci+humano: etiqueta aceite-humano. ci+revisao: registro verificável no commit de topo (ADR 0004);
+    // a etiqueta revisao-sem-defeito só vale para PRs anteriores ao registro (marcada como "sem registro").
+    let extraOk = true;
+    let extraNote = '';
+    if (task.validation === 'ci+humano') {
+      extraOk = labels.includes('aceite-humano');
+      extraNote = extraOk ? ', aceite-humano' : 'sem etiqueta aceite-humano';
+    } else if (task.validation === 'ci+revisao') {
+      const record = verifyReviewRecord(pr.reviewHead);
+      if (record.ok) extraNote = ', revisão registrada';
+      else if (labels.includes('revisao-sem-defeito')) extraNote = ', revisao-sem-defeito (etiqueta, sem registro verificável)';
+      else {
+        extraOk = false;
+        extraNote = `sem revisão registrada (${record.reason})`;
+      }
     }
-    const missing = [!ciOk ? `checks ${checks}` : null, !extraOk ? `sem etiqueta ${extraLabel}` : null].filter(Boolean).join(', ');
+    if (ciOk && extraOk) {
+      return { state: 'validada', detail: `PR #${pr.number} integrado, checks verdes${extraNote}${history}`, pr: pr.number, attempts };
+    }
+    const missing = [!ciOk ? `checks ${checks}` : null, !extraOk ? extraNote : null].filter(Boolean).join(', ');
     return { state: 'integrada', detail: `PR #${pr.number} integrado; falta: ${missing}${history}`, pr: pr.number, attempts };
   }
 
@@ -121,7 +137,17 @@ export function deriveTaskState(task, prs, pendencias) {
       return { state: 'em andamento', detail: `PR #${pr.number} em rascunho${history}`, pr: pr.number, attempts };
     }
     const checks = summarizeChecks(pr.statusCheckRollup);
-    return { state: 'implementada', checks, detail: `PR #${pr.number} aberto, checks ${checks}${history}`, pr: pr.number, attempts };
+    // Integrável = CI verde + registro da revisão do Codex sem defeito na árvore atual (ADR 0004).
+    // ci+humano nunca é integrável pelo agente.
+    const record = verifyReviewRecord(pr.reviewHead);
+    const blockers = [
+      checks !== 'verdes' ? `checks ${checks}` : null,
+      !record.ok ? record.reason : null,
+      task.validation === 'ci+humano' ? 'aguarda aceite humano' : null,
+    ].filter(Boolean);
+    const integravel = blockers.length === 0;
+    const detail = `PR #${pr.number} aberto, checks ${checks}; ${integravel ? 'integrável' : `não integrável: ${blockers.join('; ')}`}${history}`;
+    return { state: 'implementada', checks, integravel, detail, pr: pr.number, attempts };
   }
 
   if (closed.length > 0) {
