@@ -16,7 +16,8 @@ integração automática com CI verde e revisão do Codex sem defeito aberto. Fu
    não tem defeito aberto.
 2. **O humano (dono) só entra em:**
    - escolha de produto ou direção: o que construir, escopo, ferramenta, formato público. Vai como pendência;
-   - ação que consome cota ou gera custo além do orçamento combinado (ver `docs/regras/gastos.md`);
+   - ação que consome cota ou gera custo além do orçamento combinado (`docs/regras/gastos.md`;
+     enquanto essa regra não existir, todo gasto ou consumo de cota além do uso normal das tarefas);
    - ação irreversível: apagar dados ou histórico, publicar produto, transferir ou excluir repositório.
 3. `ci+humano` continua existindo só para tarefas cuja entrega é, ela mesma, uma decisão de produto.
 4. **Arquivos do starter só mudam em PR próprio**, separado do PR de tarefa. São arquivos do starter:

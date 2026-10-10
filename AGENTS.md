@@ -19,7 +19,8 @@ Autorizado sem pedir aprovação:
 
 O dono só entra em (registre como pendência, nunca faça):
 - escolha de produto ou direção: escopo, formato público, ferramenta/serviço, `decisao_pendente`;
-- ação que consome cota ou gera custo além do orçamento (`docs/regras/gastos.md`), login, credenciais;
+- ação que consome cota ou gera custo além do orçamento (`docs/regras/gastos.md`; se não existir,
+  todo gasto ou consumo de cota além do uso normal das tarefas), login, credenciais;
 - ação irreversível: apagar dados ou histórico, publicar produto, mexer em repositório/ruleset;
 - etiqueta `aceite-humano` e integração de tarefa `ci+humano` (só tarefas que são decisão de produto).
 
