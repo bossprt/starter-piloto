@@ -11,9 +11,10 @@ import { QUOTA_STOP_PERCENT, currentPercent, lastCodexRateLimits, quotaAlerts, s
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 
-function newestFile(dir, filter) {
-  if (!existsSync(dir)) return null;
-  let best = null;
+// Arquivos do mais novo para o mais antigo.
+function filesNewestFirst(dir, filter) {
+  if (!existsSync(dir)) return [];
+  const found = [];
   const stack = [dir];
   while (stack.length > 0) {
     const current = stack.pop();
@@ -21,10 +22,20 @@ function newestFile(dir, filter) {
       const full = join(current, name);
       const stat = statSync(full);
       if (stat.isDirectory()) stack.push(full);
-      else if (filter(name) && (!best || stat.mtimeMs > best.mtimeMs)) best = { path: full, mtimeMs: stat.mtimeMs };
+      else if (filter(name)) found.push({ path: full, mtimeMs: stat.mtimeMs });
     }
   }
-  return best;
+  return found.sort((a, b) => b.mtimeMs - a.mtimeMs);
+}
+
+// Leitura de cota mais recente disponível: uma sessão nova sem dados de cota não esconde a anterior.
+// Limita a 50 arquivos para não varrer histórico inteiro.
+function newestReading(dir, filter, parse, hasReading) {
+  for (const file of filesNewestFirst(dir, filter).slice(0, 50)) {
+    const reading = parse(readFileSync(file.path, 'utf8'));
+    if (reading && hasReading(reading)) return { file, reading };
+  }
+  return null;
 }
 
 function gh(args) {
@@ -48,32 +59,30 @@ const when = (ms) => `${new Date(ms).toISOString().slice(0, 16).replace('T', ' '
 const rows = [];
 
 // Claude Code: última sessão de agente gravada por scripts/sessao-agente.mjs.
-const claudeLog = newestFile(join(ROOT, '.agent-logs'), (name) => name.endsWith('.jsonl'));
-const claude = claudeLog ? summarizeClaudeStream(readFileSync(claudeLog.path, 'utf8')) : null;
-const claudeSource = claudeLog ? `sessão de ${when(claudeLog.mtimeMs)}` : 'sem sessão em .agent-logs/';
+const claudeFound = newestReading(join(ROOT, '.agent-logs'), (name) => name.endsWith('.jsonl'), summarizeClaudeStream, (r) => r.fiveHour !== null || r.sevenDay !== null);
+const claude = claudeFound?.reading ?? null;
+const claudeSource = claudeFound ? `sessão de ${when(claudeFound.file.mtimeMs)}` : 'sem leitura em .agent-logs/';
 rows.push(quotaRow('Claude Code — janela 5h', claude?.fiveHour ?? null, claude?.fiveHourResetsAt ?? null, claudeSource));
 rows.push(quotaRow('Claude Code — 7 dias', claude?.sevenDay ?? null, claude?.sevenDayResetsAt ?? null, claudeSource));
 
 // Codex: última sessão em ~/.codex/sessions (gravada pelo codex-review.mjs ou qualquer uso do Codex).
 const codexDir = join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'sessions');
-const codexLog = newestFile(codexDir, (name) => name.startsWith('rollout-') && name.endsWith('.jsonl'));
-const codex = codexLog ? lastCodexRateLimits(readFileSync(codexLog.path, 'utf8')) : null;
-const codexSource = codexLog ? `sessão de ${when(codexLog.mtimeMs)}` : 'sem sessão do Codex';
+const codexFound = newestReading(codexDir, (name) => name.startsWith('rollout-') && name.endsWith('.jsonl'), lastCodexRateLimits, () => true);
+const codex = codexFound?.reading ?? null;
+const codexSource = codexFound ? `sessão de ${when(codexFound.file.mtimeMs)}` : 'sem leitura do Codex';
 rows.push(quotaRow('Codex — janela 5h', codex?.fiveHour ?? null, codex?.fiveHourResetsAt ?? null, codexSource));
 rows.push(quotaRow('Codex — semanal', codex?.weekly ?? null, codex?.weeklyResetsAt ?? null, codexSource));
 
 // GitHub API: limite por hora do token.
-const core = gh(['api', 'rate_limit'])?.resources?.core;
-rows.push({
-  name: 'GitHub API — por hora',
-  percent: core ? Math.round((core.used / core.limit) * 1000) / 10 : null,
-  source: core ? `${core.used}/${core.limit} requisições` : 'gh indisponível',
-});
+// GET /rate_limit não conta no limite da API; é reconsultado a cada página de execuções.
+const readCore = () => gh(['api', 'rate_limit'])?.resources?.core ?? null;
+const apiPercent = (c) => (c ? Math.round((c.used / c.limit) * 1000) / 10 : null);
+let core = readCore();
 
 // GitHub Actions: repositório público com runner padrão é grátis (sem limite de minutos).
 // Mede execuções e minutos do mês, e execuções por PR (indicador de "um push por tarefa").
 // Com a API em 70% ou mais, não gasta mais requisições (regra de parada).
-const apiStopped = core && (core.used / core.limit) * 100 >= QUOTA_STOP_PERCENT;
+let apiStopped = (apiPercent(core) ?? 0) >= QUOTA_STOP_PERCENT;
 const repo = apiStopped ? null : gh(['repo', 'view', '--json', 'nameWithOwner']);
 let actions = apiStopped ? 'não consultado: API do GitHub em 70% ou mais' : 'gh indisponível';
 if (repo) {
@@ -87,6 +96,11 @@ if (repo) {
     total = runs.total_count;
     if ((runs.workflow_runs ?? []).length === 0) break;
     list.push(...runs.workflow_runs);
+    core = readCore() ?? core;
+    if ((apiPercent(core) ?? 0) >= QUOTA_STOP_PERCENT) {
+      apiStopped = true;
+      break;
+    }
   }
   if (total !== null) {
     const runs = { total_count: total };
@@ -94,10 +108,12 @@ if (repo) {
     const perPr = {};
     for (const run of list) for (const pr of run.pull_requests ?? []) perPr[pr.number] = (perPr[pr.number] ?? 0) + 1;
     const multi = Object.entries(perPr).filter(([, count]) => count > 1).map(([number, count]) => `#${number}:${count}`);
-    const partial = list.length < total ? ` (parcial: ${list.length} lidas)` : '';
+    const partial = list.length < total ? ` (parcial: ${list.length} lidas${apiStopped ? '; parado: API em 70%' : ''})` : '';
     actions = `${runs.total_count} execuções em ${month}${partial}, ~${minutes.toFixed(1)} min de relógio; PRs com mais de 1 execução: ${multi.join(' ') || 'nenhum'}`;
   }
 }
+
+rows.push({ name: 'GitHub API — por hora', percent: apiPercent(core), source: core ? `${core.used}/${core.limit} requisições` : 'gh indisponível' });
 
 console.log('Uso e cota (docs/regras/gastos.md) — parar em 70%');
 for (const row of rows) {
