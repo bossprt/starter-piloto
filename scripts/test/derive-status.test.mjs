@@ -116,6 +116,16 @@ describe('blockedTasks', () => {
   it('aceita a linha Bloqueia em negrito ou em item de lista', () => {
     expect([...blockedTasks({ title: 'x', body: '**Bloqueia:** TASK-002, TASK-003' })]).toEqual(['TASK-002', 'TASK-003']);
     expect([...blockedTasks({ title: 'x', body: '- Bloqueia: TASK-002' })]).toEqual(['TASK-002']);
+    expect([...blockedTasks({ title: 'x', body: '**Bloqueia**: TASK-003' })]).toEqual(['TASK-003']);
+  });
+
+  it('não bloqueia sem os dois-pontos (texto comum)', () => {
+    expect([...blockedTasks({ title: 'x', body: 'Bloqueiaremos TASK-001 depois' })]).toEqual([]);
+    expect([...blockedTasks({ title: 'x', body: 'Bloqueia apenas como exemplo TASK-001' })]).toEqual([]);
+  });
+
+  it('não extrai identificador parcial', () => {
+    expect([...blockedTasks({ title: 'TASK-0010 e TASK-001ABC', body: 'Bloqueia: TASK-0020, XTASK-003' })]).toEqual([]);
   });
 });
 
@@ -143,6 +153,11 @@ describe('deriveTaskState: histórico de PRs', () => {
   it('PR reaberto conta pelo estado atual (aberto)', () => {
     const reopened = pr({ state: 'OPEN', closedAt: null, statusCheckRollup: PENDING });
     expect(deriveTaskState(ci, [reopened], []).state).toBe('implementada');
+  });
+
+  it('ignora PR com identificador parcial no título (TASK-0010)', () => {
+    const other = pr({ title: 'TASK-0010: outra', state: 'MERGED', mergedAt: '2026-10-10T11:00:00Z' });
+    expect(deriveTaskState(ci, [other], []).state).toBe('planejada');
   });
 
   it('ignora PRs sem TASK-NNN no título', () => {

@@ -2,7 +2,7 @@
 // Entrada: tarefas (frontmatter), histórico de PRs, pendências e proteção da main.
 // Evidência vem só do histórico de PRs, nunca de branches.
 
-export const TASK_ID_PATTERN = /TASK-(\d{3})/;
+export const TASK_ID_PATTERN = /(?<![\w-])TASK-(\d{3})(?![\w-])/;
 
 /**
  * Resume os checks de um PR.
@@ -38,11 +38,14 @@ export function taskIdFromTitle(title) {
  */
 export function blockedTasks(issue) {
   const ids = new Set();
-  for (const match of String(issue.title ?? '').matchAll(/TASK-\d{3}/g)) ids.add(match[0]);
+  // Identificador completo: não casa TASK-0010 nem TASK-001ABC.
+  const taskIds = (text) => String(text ?? '').matchAll(/(?<![\w-])TASK-\d{3}(?![\w-])/g);
+  for (const match of taskIds(issue.title)) ids.add(match[0]);
   for (const line of String(issue.body ?? '').split(/\r?\n/)) {
-    const declared = /^\s*(?:[-*]\s*)?\**Bloqueia:?\**:?\s*(.*)$/i.exec(line);
+    // Exige os dois-pontos: "Bloqueia:", "**Bloqueia:**" ou "**Bloqueia**:", opcionalmente em item de lista.
+    const declared = /^\s*(?:[-*]\s+)?(?:\*\*Bloqueia:\*\*|\*\*Bloqueia\*\*:|Bloqueia:)\s*(.*)$/i.exec(line);
     if (!declared) continue;
-    for (const match of (declared[1] ?? '').matchAll(/TASK-\d{3}/g)) ids.add(match[0]);
+    for (const match of taskIds(declared[1])) ids.add(match[0]);
   }
   return ids;
 }
