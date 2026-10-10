@@ -8,6 +8,12 @@ Este arquivo é o ponto de partida de qualquer agente. Leia só o que a situaç�
 Proibido ler `docs/` inteiro por padrão. Use a tabela "O que ler" abaixo.
 Para saber o estado do projeto, rode `npm run status`; não deduza estado lendo arquivos.
 
+## Papéis (ADR 0002)
+
+- **Executor:** Claude Code. Implementa, valida, abre PR e integra quando permitido.
+- **Revisor:** Codex, só leitura, via `node scripts/codex-review.mjs`. Nunca escreve, commita ou integra.
+- Proibido rodar o Codex com `danger-full-access`.
+
 ## Regra de coordenação
 
 Autorizado sem pedir aprovação:
@@ -23,7 +29,7 @@ Depende do dono (nunca faça; registre como pendência):
 Pendências: nunca pare o trabalho por uma. Abra issue com etiqueta `depende-de-mim`
 contendo: o que decidir/fazer, opções, recomendação, o que fica bloqueado,
 e a linha `Bloqueia: TASK-NNN, ...` (é o que o `npm run status` lê).
-Siga em tudo que não depende dela.
+Siga em tudo que não depende dela. Só o dono fecha pendência `depende-de-mim`.
 
 Regras gerais:
 - Nunca declare algo como validado. Estado vem de PRs e CI (`npm run status`).
@@ -37,16 +43,17 @@ Regras gerais:
 1. Ler `docs/tasks/TASK-NNN.md` (só a tarefa em execução e o que ela citar).
 2. Conferir dependências em `depends_on` com `npm run status`.
    Se a tarefa tem `decisao_pendente`: não implemente; abra pendência e vá para outra.
-3. Criar branch `task/NNN-slug` a partir da `main` atualizada.
+3. Criar branch `task/NNN-slug` a partir da `main` atualizada (`npm ci` se faltar `node_modules`).
 4. Implementar com testes. Código em `src/`, testes em `test/`.
 5. Rodar `npm run validate` até passar.
 6. Abrir PR com "TASK-NNN" no título; corpo com critérios atendidos e
    seção "Revisão" (resultado da revisão independente ou "revisão: não realizada").
-7. Pedir revisão independente (outro agente: Codex revisa o Claude, Claude revisa o Codex).
-   Pedir atenção a: correção, segurança, manutenção, conflito com `docs/decisions/`.
-   Corrigir defeito real; registrar o descartado e o porquê.
-8. Se `validation: ci` e CI verde e main protegida: integrar (squash) e apagar a branch.
-   Se `validation: ci+humano`: não integrar; abrir pendência de aceite humano.
+7. Pedir revisão ao Codex: `node scripts/codex-review.mjs --task TASK-NNN` (só leitura; o prompt
+   já pede correção, segurança, manutenção e conflito com `docs/decisions/`). Registrar no PR:
+   apontado, corrigido, descartado e por quê. Codex falhou: "revisão: não realizada" + causa.
+8. Só depois da revisão registrada: se `validation: ci`, CI verde e main protegida, integrar
+   (squash) e apagar a branch. Se `validation: ci+humano`: não integrar; abrir pendência
+   de aceite humano com instruções de como o dono testa.
 9. Registrar a sessão em `docs/metrics/sessions.md`.
 
 ## O que ler em cada situação
@@ -58,6 +65,7 @@ Regras gerais:
 | Entender o produto e o fora de escopo | `docs/PRODUCT.md` |
 | Restrições técnicas | `docs/ARCHITECTURE.md` |
 | Por que a stack é esta | `docs/decisions/0001-stack.md` |
+| Papéis executor/revisor, por que o Codex só revisa | `docs/decisions/0002-papeis-executor-revisor.md` |
 | Decisão de direção (o que construir, qual ferramenta) | `docs/regras/direcao.md` |
 | Escolher ferramenta, biblioteca ou arquitetura | `docs/regras/pesquisa.md` e `docs/regras/ferramentas.md` |
 | Projeto passar a ser comercial | `docs/regras/custos.md` |
@@ -69,6 +77,7 @@ Regras gerais:
 - `npm run validate` — lint, typecheck, testes, checagens de estrutura. Mesmo comando do CI.
 - `npm run status` — estado das tarefas, próxima tarefa, proteção da main, pendências.
 - `npm test` — só testes.
+- `node scripts/codex-review.mjs --task TASK-NNN` — revisão do Codex em somente leitura.
 
 ## Convenções
 
