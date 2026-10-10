@@ -191,7 +191,7 @@ describe('deriveProtection', () => {
       const data = { ...full, enforce_admins: { enabled: false } };
       const result = deriveProtection({ classic: { ok: true, data }, rules: noRules }, 'validate');
       expect(result.state).toBe('desprotegida');
-      expect(result.detail).toContain('não vale para administradores');
+      expect(result.detail).toMatch(/administradores|bypass/);
     });
   });
 
@@ -206,7 +206,7 @@ describe('deriveProtection', () => {
       const rulesets = { 24854218: { ...activeRuleset[24854218], bypass_actors: [{ actor_type: 'RepositoryRole', actor_id: 5, bypass_mode: 'always' }] } };
       const result = deriveProtection({ classic: notProtected, rules: { ok: true, data: rulesetRules, rulesets } }, 'validate');
       expect(result.state).toBe('desprotegida');
-      expect(result.detail).toContain('não vale para administradores');
+      expect(result.detail).toMatch(/administradores|bypass/);
     });
 
     it('desprotegida quando o ruleset não exige o check', () => {
@@ -222,9 +222,37 @@ describe('deriveProtection', () => {
       expect(deriveProtection({ classic: notProtected, rules: { ok: true, data, rulesets: activeRuleset } }, 'validate').state).toBe('desprotegida');
     });
 
-    it('sem detalhe do ruleset não presume ausência de bypass', () => {
-      const result = deriveProtection({ classic: notProtected, rules: { ok: true, data: rulesetRules, rulesets: {} } }, 'validate');
-      expect(result.state).toBe('desprotegida');
+    it('desconhecido quando o detalhe do ruleset falha (403/404/500)', () => {
+      const rulesets = { 24854218: { error: 'HTTP 403' } };
+      const result = deriveProtection({ classic: notProtected, rules: { ok: true, data: rulesetRules, rulesets } }, 'validate');
+      expect(result.state).toBe('desconhecido');
+      expect(result.detail).toContain('bypass não determinado');
+    });
+
+    it('desconhecido quando a API omite bypass_actors (sem permissão para vê-los)', () => {
+      const rulesets = { 24854218: { name: 'proteger-main', enforcement: 'active' } };
+      expect(deriveProtection({ classic: notProtected, rules: { ok: true, data: rulesetRules, rulesets } }, 'validate').state).toBe('desconhecido');
+    });
+
+    it('política estrita: bypass só de app também invalida', () => {
+      const rulesets = { 24854218: { ...activeRuleset[24854218], bypass_actors: [{ actor_type: 'Integration', actor_id: 1, bypass_mode: 'always' }] } };
+      expect(deriveProtection({ classic: notProtected, rules: { ok: true, data: rulesetRules, rulesets } }, 'validate').state).toBe('desprotegida');
+    });
+
+    it('desprotegida quando o ruleset está só em avaliação (evaluate)', () => {
+      const rulesets = { 24854218: { ...activeRuleset[24854218], enforcement: 'evaluate' } };
+      expect(deriveProtection({ classic: notProtected, rules: { ok: true, data: rulesetRules, rulesets } }, 'validate').state).toBe('desprotegida');
+    });
+
+    it('detalhe faltante não importa quando outra fonte já garante tudo', () => {
+      const rulesets = { 24854218: { error: 'HTTP 403' } };
+      expect(deriveProtection({ classic: { ok: true, data: full }, rules: { ok: true, data: rulesetRules, rulesets } }, 'validate').state).toBe('protegida');
+    });
+
+    it('requisito ausente decide desprotegida mesmo com outro indeterminado', () => {
+      const rulesets = { 24854218: { error: 'HTTP 403' } };
+      const data = rulesetRules.filter((rule) => rule.type !== 'required_status_checks');
+      expect(deriveProtection({ classic: notProtected, rules: { ok: true, data, rulesets } }, 'validate').state).toBe('desprotegida');
     });
 
     it('combina formatos: PR pela clássica e check pelo ruleset', () => {

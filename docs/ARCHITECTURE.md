@@ -13,3 +13,5 @@
 - Scripts do starter em Node `.mjs`, sem bash; lógica pura separada de chamadas a git/gh/disco.
 - Estado de tarefas é derivado de PRs e CI (`scripts/project-status.mjs`); nunca escrito em arquivo.
 - `npm run validate` é o mesmo comando local, no hook do Claude Code e no CI.
+- Proteção da main: aceita proteção clássica ou ruleset; "protegida" exige PR e check `validate`
+  sem bypass. Qualquer `bypass_actors` invalida (política estrita); bypass não determinado = "desconhecido".

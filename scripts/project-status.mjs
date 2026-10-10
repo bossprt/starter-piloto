@@ -76,7 +76,7 @@ function collectRules(name) {
   const rulesets = {};
   for (const id of new Set(rules.data.map((rule) => rule.ruleset_id))) {
     const detail = ghJson(['api', `repos/${name}/rulesets/${id}`]);
-    if (detail.ok) rulesets[id] = detail.data;
+    rulesets[id] = detail.ok ? detail.data : { error: detail.error };
   }
   return { ok: true, data: rules.data, rulesets };
 }
