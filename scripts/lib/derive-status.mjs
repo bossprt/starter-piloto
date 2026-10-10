@@ -105,11 +105,13 @@ export function deriveTaskState(task, prs, pendencias) {
     const checks = summarizeChecks(pr.statusCheckRollup);
     const labels = (pr.labels ?? []).map((label) => (typeof label === 'string' ? label : label.name));
     const ciOk = checks === 'verdes';
-    const humanOk = task.validation !== 'ci+humano' || labels.includes('aceite-humano');
-    if (ciOk && humanOk) {
-      return { state: 'validada', detail: `PR #${pr.number} integrado, checks verdes${task.validation === 'ci+humano' ? ', aceite-humano' : ''}${history}`, pr: pr.number, attempts };
+    // Evidência extra exigida pelo tipo de validação, sempre por etiqueta no PR.
+    const extraLabel = { 'ci+humano': 'aceite-humano', 'ci+revisao': 'revisao-sem-defeito' }[task.validation];
+    const extraOk = !extraLabel || labels.includes(extraLabel);
+    if (ciOk && extraOk) {
+      return { state: 'validada', detail: `PR #${pr.number} integrado, checks verdes${extraLabel ? `, ${extraLabel}` : ''}${history}`, pr: pr.number, attempts };
     }
-    const missing = [!ciOk ? `checks ${checks}` : null, !humanOk ? 'sem etiqueta aceite-humano' : null].filter(Boolean).join(', ');
+    const missing = [!ciOk ? `checks ${checks}` : null, !extraOk ? `sem etiqueta ${extraLabel}` : null].filter(Boolean).join(', ');
     return { state: 'integrada', detail: `PR #${pr.number} integrado; falta: ${missing}${history}`, pr: pr.number, attempts };
   }
 

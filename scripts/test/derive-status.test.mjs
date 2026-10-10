@@ -79,6 +79,20 @@ describe('deriveTaskState: um caso por estado', () => {
     expect(deriveTaskState(human, [merged], []).state).toBe('validada');
   });
 
+  it('validada: ci+revisao com merge, checks verdes e revisao-sem-defeito', () => {
+    const task = { id: 'TASK-004', title: 'JSON', validation: 'ci+revisao', depends_on: [] };
+    const merged = pr({ title: 'TASK-004: json', state: 'MERGED', mergedAt: '2026-10-10T11:00:00Z', labels: [{ name: 'revisao-sem-defeito' }] });
+    expect(deriveTaskState(task, [merged], []).state).toBe('validada');
+  });
+
+  it('integrada: ci+revisao com merge e CI verde mas sem revisao-sem-defeito', () => {
+    const task = { id: 'TASK-004', title: 'JSON', validation: 'ci+revisao', depends_on: [] };
+    const merged = pr({ title: 'TASK-004: json', state: 'MERGED', mergedAt: '2026-10-10T11:00:00Z' });
+    const result = deriveTaskState(task, [merged], []);
+    expect(result.state).toBe('integrada');
+    expect(result.detail).toContain('sem etiqueta revisao-sem-defeito');
+  });
+
   it('bloqueada (aguardando decisão): decisao_pendente com pendência aberta', () => {
     const issue = { number: 9, title: 'TASK-004: formato do JSON', state: 'OPEN', body: '' };
     const result = deriveTaskState(decision, [], [issue]);

@@ -19,7 +19,9 @@ Para saber o estado do projeto, rode `npm run status`; não deduza estado lendo 
 Autorizado sem pedir aprovação:
 - programar, testar, abrir PRs com "TASK-NNN" no título;
 - integrar PR de tarefa com `validation: ci` quando o CI estiver verde
-  e a proteção da main estiver confirmada (`npm run status` mostra "protegida").
+  e a proteção da main estiver confirmada (`npm run status` mostra "protegida");
+- integrar `validation: ci+revisao` nas mesmas condições e com a última revisão do Codex
+  sem defeito aberto (aplique a etiqueta `revisao-sem-defeito` no PR antes do merge).
 
 Depende do dono (nunca faça; registre como pendência):
 - login em conta, credenciais, qualquer coisa que gere cobrança nova;
@@ -53,7 +55,7 @@ Regras gerais:
    apontado, corrigido, descartado e por quê. Codex falhou: "revisão: não realizada" + causa.
 8. Só depois da revisão registrada: se `validation: ci`, CI verde e main protegida, integrar
    (squash) e apagar a branch. Se `validation: ci+humano`: não integrar; abrir pendência
-   de aceite humano com instruções de como o dono testa.
+   de aceite humano com instruções de como o dono testa (sem linha `Bloqueia:`).
 9. Registrar a sessão em `docs/metrics/sessions.md`.
 
 ## O que ler em cada situação
@@ -82,5 +84,6 @@ Regras gerais:
 ## Convenções
 
 - Tarefas: frontmatter `id, title, depends_on, validation, test_command`; sem status/owner/evidence.
+  `validation`: `ci`, `ci+humano` (etiqueta `aceite-humano`, só o dono) ou `ci+revisao`.
 - ADRs: `docs/decisions/NNNN-slug.md`, numeração sequencial.
 - Este arquivo tem no máximo 100 linhas (checado pelo validate).

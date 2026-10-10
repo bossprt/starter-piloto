@@ -87,11 +87,68 @@ describe('cpf-cnpj', () => {
   });
 
   it('opção desconhecida é erro de uso, mesmo junto com --help', () => {
-    for (const args of [['--json'], ['-h'], ['52998224725', '--x'], ['--help', '--x']]) {
+    for (const args of [['-h'], ['52998224725', '--x'], ['--help', '--x']]) {
       const result = run(...args);
       expect(result.code).toBe(EXIT_USAGE);
       expect(result.stdout).toEqual([]);
       expect(result.stderr[0]).toMatch(/opção desconhecida: -/);
     }
+  });
+});
+
+describe('cpf-cnpj --json', () => {
+  it('emite o formato da pendência #6 (opção B): um objeto, uma linha, chaves na ordem', () => {
+    const result = run('--json', '529.982.247-25', '123');
+    expect(result.code).toBe(EXIT_INVALID);
+    expect(result.stderr).toEqual([]);
+    expect(result.stdout).toEqual([
+      '{"valido":false,"total":2,"invalidos":1,"resultados":[{"entrada":"529.982.247-25","tipo":"cpf","valido":true},{"entrada":"123","tipo":"desconhecido","valido":false}]}',
+    ]);
+  });
+
+  it('todos válidos: valido true, invalidos 0, código 0; --json em qualquer posição', () => {
+    const result = run('52998224725', '--json', '12.ABC.345/01DE-35');
+    expect(result.code).toBe(EXIT_OK);
+    expect(JSON.parse(result.stdout[0] ?? '')).toEqual({
+      valido: true,
+      total: 2,
+      invalidos: 0,
+      resultados: [
+        { entrada: '52998224725', tipo: 'cpf', valido: true },
+        { entrada: '12.ABC.345/01DE-35', tipo: 'cnpj', valido: true },
+      ],
+    });
+  });
+
+  it('DV errado e malformados viram valido false, na ordem, com JSON parseável', () => {
+    const inputs = ['52998224724', '11222333000182', '12abc34501de35', '529.982.247-25\n1', 'a\tb', 'x\\y', ''];
+    const result = run('--json', ...inputs);
+    expect(result.code).toBe(EXIT_INVALID);
+    expect(result.stdout).toHaveLength(1);
+    const report = JSON.parse(result.stdout[0] ?? '') as { total: number; invalidos: number; resultados: { entrada: string; valido: boolean }[] };
+    expect(report.total).toBe(inputs.length);
+    expect(report.invalidos).toBe(inputs.length);
+    expect(report.resultados.map((r) => r.entrada)).toEqual(inputs);
+    expect(report.resultados.every((r) => r.valido === false)).toBe(true);
+  });
+
+  it('erro de uso continua em texto no stderr, nada no stdout, código 2', () => {
+    for (const args of [['--json'], ['--json', '--xml', '52998224725']]) {
+      const result = run(...args);
+      expect(result.code).toBe(EXIT_USAGE);
+      expect(result.stdout).toEqual([]);
+      expect(result.stderr[0]).toMatch(/^cpf-cnpj: /);
+    }
+  });
+
+  it('--help junto com --json mostra o uso (que cita --json) e sai com 0', () => {
+    const result = run('--json', '--help');
+    expect(result.code).toBe(EXIT_OK);
+    expect(result.stdout).toEqual([USAGE]);
+    expect(USAGE).toContain('--json');
+  });
+
+  it('sem --json a saída de texto não muda', () => {
+    expect(run('529.982.247-25', '123').stdout).toEqual(['válido\tcpf\t529.982.247-25', 'inválido\tdesconhecido\t123']);
   });
 });
