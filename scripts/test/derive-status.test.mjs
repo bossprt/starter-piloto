@@ -227,7 +227,7 @@ describe('deriveProtection', () => {
       const data = rulesetRules.filter((rule) => rule.type !== 'required_status_checks');
       const result = deriveProtection({ classic: notProtected, rules: { ok: true, data, rulesets: activeRuleset } }, 'validate');
       expect(result.state).toBe('desprotegida');
-      expect(result.detail).toContain('check obrigatório ausente');
+      expect(result.detail).toContain('check "validate" obrigatório ausente');
     });
 
     it('desprotegida quando o ruleset exige outro check', () => {
@@ -277,6 +277,28 @@ describe('deriveProtection', () => {
     });
   });
 
+  describe('vários checks exigidos', () => {
+    const both = ['validate', 'revisao-registrada'];
+    const withBoth = rulesetRules.map((rule) => (rule.type === 'required_status_checks'
+      ? { ...rule, parameters: { required_status_checks: [{ context: 'validate' }, { context: 'revisao-registrada' }] } } : rule));
+
+    it('protegida quando o ruleset exige os dois checks', () => {
+      const result = deriveProtection({ classic: notProtected, rules: { ok: true, data: withBoth, rulesets: activeRuleset } }, both);
+      expect(result.state).toBe('protegida');
+      expect(result.detail).toContain('check "revisao-registrada" obrigatório');
+    });
+
+    it('desprotegida quando falta revisao-registrada no ruleset', () => {
+      const result = deriveProtection({ classic: notProtected, rules: { ok: true, data: rulesetRules, rulesets: activeRuleset } }, both);
+      expect(result.state).toBe('desprotegida');
+      expect(result.detail).toContain('check "revisao-registrada" obrigatório ausente');
+    });
+
+    it('aceita um check como string (compatibilidade)', () => {
+      expect(deriveProtection({ classic: notProtected, rules: { ok: true, data: rulesetRules, rulesets: activeRuleset } }, 'validate').state).toBe('protegida');
+    });
+  });
+
   describe('falhas de consulta', () => {
     it('desprotegida quando nenhuma das duas APIs mostra proteção', () => {
       expect(deriveProtection({ classic: notProtected, rules: noRules }, 'validate').state).toBe('desprotegida');
@@ -303,12 +325,12 @@ describe('deriveProjectStatus', () => {
   it('aponta a próxima tarefa respeitando dependências', () => {
     const tasks = [ci, { id: 'TASK-002', title: 'CNPJ', validation: 'ci', depends_on: ['TASK-001'] }];
     const merged = pr({ state: 'MERGED', mergedAt: '2026-10-10T11:00:00Z' });
-    const status = deriveProjectStatus({ tasks, prs: [merged], pendencias: [], protection: null, requiredCheck: 'validate' });
+    const status = deriveProjectStatus({ tasks, prs: [merged], pendencias: [], protection: null, requiredChecks: ['validate'] });
     expect(status.next).toBe('TASK-002');
   });
 
   it('GitHub inacessível: tudo desconhecido, pendências desconhecidas', () => {
-    const status = deriveProjectStatus({ tasks: [ci], prs: null, pendencias: null, protection: { classic: { ok: false, error: 'offline' }, rules: { ok: false, error: 'offline' } }, requiredCheck: 'validate' });
+    const status = deriveProjectStatus({ tasks: [ci], prs: null, pendencias: null, protection: { classic: { ok: false, error: 'offline' }, rules: { ok: false, error: 'offline' } }, requiredChecks: ['validate'] });
     expect(status.tasks[0].state).toBe('desconhecido');
     expect(status.pendencias).toBeNull();
     expect(status.protection.state).toBe('desconhecido');

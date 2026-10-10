@@ -163,11 +163,13 @@ export function deriveTaskState(task, prs, pendencias) {
   return { state: 'planejada', detail: 'nenhum PR', attempts };
 }
 
-const REQUIREMENTS = ['pr', 'check'];
-const REQUIREMENT_LABEL = { pr: 'PR obrigatório', check: 'check obrigatório' };
+// Requisitos: 'pr' e um 'check:<nome>' por check exigido.
+const checkKey = (name) => `check:${name}`;
+const requirementLabel = (key) => (key === 'pr' ? 'PR obrigatório' : `check "${key.slice('check:'.length)}" obrigatório`);
+const normalizeChecks = (requiredChecks) => (Array.isArray(requiredChecks) ? requiredChecks : [requiredChecks]);
 
 /** Requisitos atendidos pela proteção clássica. */
-function classicRequirements(data, requiredCheck) {
+function classicRequirements(data, requiredChecks) {
   const contexts = [
     ...(data.required_status_checks?.contexts ?? []),
     ...((data.required_status_checks?.checks ?? []).map((check) => check.context)),
@@ -175,7 +177,9 @@ function classicRequirements(data, requiredCheck) {
   const enforced = data.enforce_admins?.enabled === true;
   const found = {};
   if (data.required_pull_request_reviews) found.pr = { source: 'proteção clássica', enforced };
-  if (contexts.includes(requiredCheck)) found.check = { source: 'proteção clássica', enforced };
+  for (const name of requiredChecks) {
+    if (contexts.includes(name)) found[checkKey(name)] = { source: 'proteção clássica', enforced };
+  }
   return found;
 }
 
@@ -195,32 +199,37 @@ function rulesetEnforced(ruleset) {
 const RANK = { true: 2, null: 1, false: 0 };
 
 /** Requisitos atendidos pelas regras efetivas (rulesets) da branch. */
-function rulesetRequirements(rules, rulesets, requiredCheck) {
+function rulesetRequirements(rules, rulesets, requiredChecks) {
   const found = {};
   for (const rule of rules) {
     const ruleset = rulesets[rule.ruleset_id];
     const enforced = rulesetEnforced(ruleset);
     const source = `ruleset "${ruleset?.name ?? rule.ruleset_id}"`;
-    let key = null;
-    if (rule.type === 'pull_request') key = 'pr';
-    if (rule.type === 'required_status_checks'
-      && (rule.parameters?.required_status_checks ?? []).some((check) => check.context === requiredCheck)) key = 'check';
-    if (key && (!found[key] || RANK[String(enforced)] > RANK[String(found[key].enforced)])) found[key] = { source, enforced };
+    const keys = [];
+    if (rule.type === 'pull_request') keys.push('pr');
+    if (rule.type === 'required_status_checks') {
+      const contexts = (rule.parameters?.required_status_checks ?? []).map((check) => check.context);
+      for (const name of requiredChecks) if (contexts.includes(name)) keys.push(checkKey(name));
+    }
+    for (const key of keys) {
+      if (!found[key] || RANK[String(enforced)] > RANK[String(found[key].enforced)]) found[key] = { source, enforced };
+    }
   }
   return found;
 }
 
 /**
  * Proteção da main combinando os dois formatos do GitHub.
- * Protegida = PR obrigatório e check obrigatório, ambos sem bypass para administradores,
+ * Protegida = PR obrigatório e todos os checks exigidos obrigatórios, sem bypass para administradores,
  * vindos da proteção clássica (enforce_admins) ou de ruleset ativo sem bypass_actors.
  * @param {{
  *   classic: { ok: true, data: any } | { ok: false, notProtected?: boolean, error?: string } | null,
  *   rules?: { ok: true, data: any[], rulesets: Record<string, any> } | { ok: false, error?: string } | null,
  * } | null} input
- * @param {string} requiredCheck nome do check exigido
+ * @param {string | string[]} requiredChecks nome(s) do(s) check(s) exigido(s)
  */
-export function deriveProtection(input, requiredCheck) {
+export function deriveProtection(input, requiredChecks) {
+  const checks = normalizeChecks(requiredChecks);
   const classic = input?.classic ?? null;
   const rules = input?.rules ?? null;
   const classicKnown = Boolean(classic) && (classic.ok || classic.notProtected === true);
@@ -230,24 +239,24 @@ export function deriveProtection(input, requiredCheck) {
     return { state: 'desconhecido', detail: errors || 'consulta não realizada' };
   }
 
-  const fromClassic = classic?.ok ? classicRequirements(classic.data ?? {}, requiredCheck) : {};
-  const fromRules = rulesKnown ? rulesetRequirements(rules.data ?? [], rules.rulesets ?? {}, requiredCheck) : {};
+  const fromClassic = classic?.ok ? classicRequirements(classic.data ?? {}, checks) : {};
+  const fromRules = rulesKnown ? rulesetRequirements(rules.data ?? [], rules.rulesets ?? {}, checks) : {};
   const sources = [];
   const problems = [];
   const undetermined = [];
-  for (const key of REQUIREMENTS) {
+  for (const key of ['pr', ...checks.map(checkKey)]) {
     const options = [fromClassic[key], fromRules[key]].filter(Boolean);
     const best = options.find((option) => option.enforced === true)
       ?? options.find((option) => option.enforced === null)
       ?? options[0];
-    if (!best) problems.push(`${REQUIREMENT_LABEL[key]} ausente`);
-    else if (best.enforced === null) undetermined.push(`${REQUIREMENT_LABEL[key]} (${best.source}): bypass não determinado`);
-    else if (!best.enforced) problems.push(`${REQUIREMENT_LABEL[key]} (${best.source}) tem bypass ou não está ativo`);
-    else sources.push(`${REQUIREMENT_LABEL[key]} via ${best.source}`);
+    if (!best) problems.push(`${requirementLabel(key)} ausente`);
+    else if (best.enforced === null) undetermined.push(`${requirementLabel(key)} (${best.source}): bypass não determinado`);
+    else if (!best.enforced) problems.push(`${requirementLabel(key)} (${best.source}) tem bypass ou não está ativo`);
+    else sources.push(`${requirementLabel(key)} via ${best.source}`);
   }
 
   if (problems.length === 0 && undetermined.length === 0) {
-    return { state: 'protegida', detail: `${sources.join('; ')}; check "${requiredCheck}"; sem bypass (vale para administradores)` };
+    return { state: 'protegida', detail: `${sources.join('; ')}; sem bypass (vale para administradores)` };
   }
   // Uma das fontes falhou: o que falta pode estar nela.
   if (!classicKnown || !rulesKnown) {
@@ -260,7 +269,7 @@ export function deriveProtection(input, requiredCheck) {
 
 /**
  * Estado completo do projeto.
- * @param {{ tasks: any[], prs: any[] | null, pendencias: any[] | null, protection: any, requiredCheck: string }} input
+ * @param {{ tasks: any[], prs: any[] | null, pendencias: any[] | null, protection: any, requiredChecks: string[] }} input
  */
 export function deriveProjectStatus(input) {
   const tasks = [...input.tasks].sort((a, b) => a.id.localeCompare(b.id));
@@ -273,7 +282,7 @@ export function deriveProjectStatus(input) {
   return {
     tasks: states,
     next: next ? next.id : null,
-    protection: deriveProtection(input.protection, input.requiredCheck),
+    protection: deriveProtection(input.protection, input.requiredChecks),
     pendencias,
   };
 }

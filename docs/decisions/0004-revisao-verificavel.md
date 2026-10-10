@@ -25,6 +25,10 @@ não tem defeito aberto. Até aqui, a evidência da revisão era um texto no PR 
 4. **Ruleset (configuração do dono):** incluir `revisao-registrada` (integração GitHub Actions,
    id 15368) como check obrigatório no ruleset `proteger-main`. Sem isso, o GitHub não bloqueia
    o merge de PR sem registro; só o `npm run status` e o agente respeitam a regra.
+   **Aplicado pelo dono em 2026-10-10.** A API confirmou `validate` e `revisao-registrada` em
+   `required_status_checks`. Prova no GitHub: o PR #22 (código sem registro) ficou `BLOCKED`;
+   antes da mudança, o PR #20 ficava `UNSTABLE` e mergeável. O `npm run status` exige os dois checks
+   para mostrar "protegida".
 
 ## Limitação: os agentes usam a mesma credencial
 

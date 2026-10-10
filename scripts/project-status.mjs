@@ -11,7 +11,8 @@ import { parseFrontmatter } from './lib/frontmatter.mjs';
 import { deriveProjectStatus } from './lib/derive-status.mjs';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
-const REQUIRED_CHECK = 'validate';
+// Checks que o ruleset da main precisa exigir: CI (validate) e registro da revisão do Codex (ADR 0004).
+const REQUIRED_CHECKS = ['validate', 'revisao-registrada'];
 
 function gh(args) {
   const result = spawnSync('gh', args, { cwd: ROOT, encoding: 'utf8', shell: false });
@@ -111,5 +112,5 @@ function render(status) {
   return lines.join('\n');
 }
 
-const status = deriveProjectStatus({ tasks: loadTasks(), ...collect(), requiredCheck: REQUIRED_CHECK });
+const status = deriveProjectStatus({ tasks: loadTasks(), ...collect(), requiredChecks: REQUIRED_CHECKS });
 console.log(process.argv.includes('--json') ? JSON.stringify(status, null, 2) : render(status));
