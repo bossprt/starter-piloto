@@ -5,10 +5,14 @@
   "type": "module",
   "license": "MIT",
   "private": true,
+  "bin": {
+    "cpf-cnpj": "dist/cli.js"
+  },
   "engines": {
     "node": ">=22.13"
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// `npm run validate`: lint, typecheck, testes e checagens de estrutura.
+// `npm run validate`: lint, typecheck, build, testes e checagens de estrutura.
 // Roda todas as etapas e falha no fim se alguma falhou.
 
 import { spawnSync } from 'node:child_process';
@@ -12,6 +12,7 @@ const BIN = (name) => join(ROOT, 'node_modules', name);
 const steps = [
   { name: 'lint', args: [BIN('eslint/bin/eslint.js'), '.'] },
   { name: 'typecheck', args: [BIN('typescript/bin/tsc'), '--noEmit'] },
+  { name: 'build', args: [BIN('typescript/bin/tsc'), '-p', 'tsconfig.build.json'] },
   { name: 'testes', args: [BIN('vitest/vitest.mjs'), 'run'] },
   { name: 'estrutura', args: [join(ROOT, 'scripts', 'check-structure.mjs')] },
 ];
