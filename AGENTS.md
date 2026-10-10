@@ -40,7 +40,8 @@ Regras gerais:
 
 ## Fluxo de tarefa
 
-1. Ler `docs/tasks/TASK-NNN.md` (só a tarefa em execução e o que ela citar).
+1. `npm run uso` (cota em 70% ou mais: pare aquele tipo de ação, ver `docs/regras/gastos.md`).
+   Ler `docs/tasks/TASK-NNN.md` (só a tarefa em execução e o que ela citar).
 2. Conferir `depends_on` com `npm run status`. Tarefa com `decisao_pendente`: pendência e outra tarefa.
 3. Branch `task/NNN-slug` a partir da `main` atualizada (`npm ci` se faltar `node_modules`).
 4. Implementar com testes. Código em `src/`, testes em `test/`.
@@ -67,6 +68,7 @@ Regras gerais:
 | Decisão de direção (o que construir, qual ferramenta) | `docs/regras/direcao.md` |
 | Escolher ferramenta, biblioteca ou arquitetura | `docs/regras/pesquisa.md` e `docs/regras/ferramentas.md` |
 | Projeto passar a ser comercial | `docs/regras/custos.md` |
+| Push, CI, cota, sessão nova de agente, publicação | `docs/regras/gastos.md` |
 | Registrar sessão (tokens, cota, ciclos) | `docs/metrics/sessions.md` |
 | Mexer nos scripts do starter | `scripts/` (comece por `scripts/validate.mjs`), em PR próprio |
 
@@ -74,6 +76,7 @@ Regras gerais:
 
 - `npm run validate` — lint, typecheck, build, testes, checagens de estrutura. Mesmo comando do CI.
 - `npm run status` — estado das tarefas, próxima tarefa, proteção da main, pendências.
+- `npm run uso` — uso e cota de Claude, Codex e GitHub (para em 70%).
 - `node scripts/codex-review.mjs --task TASK-NNN --registrar` — revisão do Codex (só leitura) + registro.
 
 ## Convenções

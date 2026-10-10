@@ -1,9 +1,10 @@
 name: validate
 
+# docs/regras/gastos.md: CI só em PR (a main só recebe PR já validado), execuções antigas canceladas
+# e mudança só de documentação sem npm ci/testes. Os dois checks sempre reportam resultado:
+# um job pulado por filtro de caminho deixaria o check obrigatório pendente.
 on:
   pull_request:
-  push:
-    branches: [main]
 
 permissions:
   contents: read
@@ -19,18 +20,25 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npm run validate
+      - id: escopo
+        run: node scripts/ci-escopo.mjs --base ${{ github.event.pull_request.base.sha }} --head ${{ github.event.pull_request.head.sha }}
+      - if: steps.escopo.outputs.docs == 'true'
+        run: node scripts/check-structure.mjs
+      - if: steps.escopo.outputs.docs != 'true'
+        run: npm ci
+      - if: steps.escopo.outputs.docs != 'true'
+        run: npm run validate
 
   # ADR 0004: exige o registro da revisão do Codex no commit de topo e a assinatura (trailer Agente:)
   # em todos os commits do PR. Não precisa de npm ci: o script não tem dependências.
   revisao-registrada:
     name: revisao-registrada
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

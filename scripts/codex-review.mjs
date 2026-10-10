@@ -10,6 +10,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { buildRecordMessage, parseVerdict } from './lib/review-record.mjs';
+import { QUOTA_STOP_PERCENT, lastCodexRateLimits } from './lib/usage.mjs';
 
 function arg(name, fallback) {
   const index = process.argv.indexOf(name);
@@ -93,7 +94,7 @@ if (result.status !== 0 || answer.trim() === '') {
 
 const tokens = usage ? usage.input_tokens + usage.output_tokens : null;
 
-// Cota do Codex: último rate_limits gravado no arquivo da sessão (~/.codex/sessions/AAAA/MM/DD/rollout-*-<thread>.jsonl).
+// Cota do Codex: último rate_limits do arquivo da sessão (~/.codex/sessions/AAAA/MM/DD/rollout-*-<thread>.jsonl).
 function readRateLimits(id) {
   const root = join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'sessions');
   if (!id || !existsSync(root)) return null;
@@ -103,15 +104,7 @@ function readRateLimits(id) {
     for (const name of readdirSync(dir)) {
       const full = join(dir, name);
       if (statSync(full).isDirectory()) stack.push(full);
-      else if (name.endsWith(`${id}.jsonl`)) {
-        const found = [...readFileSync(full, 'utf8').matchAll(/"rate_limits":(\{"limit_id".*?"secondary":\{[^}]*\})/g)];
-        if (found.length === 0) return null;
-        try {
-          return JSON.parse(`${found[found.length - 1][1]}}`);
-        } catch {
-          return null;
-        }
-      }
+      else if (name.endsWith(`${id}.jsonl`)) return lastCodexRateLimits(readFileSync(full, 'utf8'));
     }
   }
   return null;
@@ -124,8 +117,8 @@ console.log('');
 console.log(`veredito: ${verdict ?? 'não informado pelo Codex'}`);
 console.log(`tokens usados pelo Codex: ${tokens ?? 'não disponível'}${usage ? ` (entrada ${usage.input_tokens}, cache ${usage.cached_input_tokens}, saída ${usage.output_tokens})` : ''}`);
 if (limits) {
-  console.log(`cota do Codex: 5h ${limits.primary?.used_percent ?? '?'}% · semanal ${limits.secondary?.used_percent ?? '?'}%`);
-  if ((limits.primary?.used_percent ?? 0) >= 70 || (limits.secondary?.used_percent ?? 0) >= 70) {
+  console.log(`cota do Codex: 5h ${limits.fiveHour ?? '?'}% · semanal ${limits.weekly ?? '?'}%`);
+  if ((limits.fiveHour ?? 0) >= QUOTA_STOP_PERCENT || (limits.weekly ?? 0) >= QUOTA_STOP_PERCENT) {
     console.log('ATENÇÃO: cota do Codex em 70% ou mais. Pare revisões novas e abra pendência (docs/regras/gastos.md).');
   }
 } else {
