@@ -47,9 +47,9 @@ const prompt = [
 const args = [codex, 'exec', '--ephemeral', '-s', 'read-only', '-c', 'windows.sandbox="unelevated"', '-'];
 const result = spawnSync(process.execPath, args, { encoding: 'utf8', input: prompt, maxBuffer: 64 * 1024 * 1024 });
 
-const output = `${result.stdout ?? ''}`;
-const tokens = /tokens used\s*\n\s*([\d.,]+)/.exec(output)?.[1] ?? 'não disponível';
-const finalAnswer = output.split(/\ntokens used\s*\n\s*[\d.,]+\s*\n/).pop()?.trim() ?? '';
+// codex exec escreve a resposta final no stdout e o progresso (incluindo "tokens used") no stderr.
+const finalAnswer = `${result.stdout ?? ''}`.trim();
+const tokens = /tokens used\s*\n\s*([\d.,]+)/.exec(`${result.stderr ?? ''}`)?.[1] ?? 'não disponível';
 if (result.status !== 0 || finalAnswer === '') {
   console.error(`codex-review: Codex falhou (código ${result.status}). Registre "revisão: não realizada".`);
   console.error(`${result.stderr ?? ''}`.split('\n').slice(-15).join('\n'));
