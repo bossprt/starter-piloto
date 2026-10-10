@@ -3,6 +3,12 @@
 Vale para todo agente, em todo projeto que use este starter. Complementa a ADR 0003: ação que consome
 cota ou gera custo além do descrito aqui é decisão do dono (pendência `depende-de-mim`).
 
+## Orçamento
+
+**Zero além das assinaturas** listadas em `docs/metrics/servicos.md` (decisão do dono, 2026-10-10).
+Qualquer gasto novo vira pendência: serviço pago, créditos, excedente, minutos de Actions em repositório
+privado, chave de API, escopo novo de token.
+
 ## 1. Inventário e medição
 
 - Inventário dos serviços (plano, limite, como medir): `docs/metrics/servicos.md`.
