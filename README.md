@@ -40,3 +40,7 @@ inválido	desconhecido	123
 - Agentes: comece por [AGENTS.md](AGENTS.md).
 - Estado do projeto: `npm run status`.
 - Validação completa (igual ao CI): `npm run validate`.
+
+## Histórico
+
+Rodada 1 encerrada em 10/10/2026. Registro fechado: [bossprt/starter-modelo — docs/historico/rodada-1.md](https://github.com/bossprt/starter-modelo/blob/main/docs/historico/rodada-1.md).
